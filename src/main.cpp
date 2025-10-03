@@ -9,19 +9,24 @@
 #include <memory>
 #include <ranges>
 #include <cstring>
+#include "re2/re2.h"
+#include "tokenizer/tokenizer.h"
 
 namespace rng = std::ranges::views;
 
-std::vector<std::string> split(const std::string &s, const std::string &delimiter) {
+std::vector<std::string> split(const std::string &s, const std::string &delimiter)
+{
     std::vector<std::string> tokens{};
     std::size_t pos{};
 
-    while (true) {
+    while (true)
+    {
         const auto delimiter_index = s.find(delimiter, pos);
 
         std::string token = s.substr(pos, delimiter_index - pos);
 
-        if (!token.empty()) {
+        if (!token.empty())
+        {
             tokens.push_back(token);
         }
 
@@ -34,17 +39,20 @@ std::vector<std::string> split(const std::string &s, const std::string &delimite
     return tokens;
 }
 
-class ArgsToExec {
+class ArgsToExec
+{
     typedef char *args_array[];
 
     std::unique_ptr<args_array> args_to_exec;
     std::size_t args_size;
 
 public:
-    explicit ArgsToExec(const std::vector<std::string> &args) {
+    explicit ArgsToExec(const std::vector<std::string> &args)
+    {
         auto args_array = std::make_unique<char *[]>(args.size() + 1);
 
-        for (int i{}; i < args.size(); ++i) {
+        for (size_t i{}; i < args.size(); ++i)
+        {
             args_array[i] = strdup(args[i].c_str());
         }
 
@@ -55,43 +63,61 @@ public:
         this->args_to_exec = std::move(args_array);
     }
 
-    [[nodiscard]] auto args() const & {
+    [[nodiscard]] auto args() const &
+    {
         return &this->args_to_exec;
     }
 
-    ~ArgsToExec() {
-        for (int i{}; i < this->args_size - 1; ++i) {
+    ~ArgsToExec()
+    {
+        for (size_t i{}; i < this->args_size - 1; ++i)
+        {
             delete this->args_to_exec[i];
         }
     }
 };
 
-int main() {
+int main()
+{
     std::string line{};
+    std::vector a{1, 2, 3, 4};
+    std::println("{}", a);
 
-    while (true) {
+    while (true)
+    {
         std::print("$ ");
         std::cout << std::flush;
 
         std::getline(std::cin, line);
 
+        Tokenizer tokenizer{line};
+
+        while (const auto token = tokenizer.next_token())
+        {
+            std::println("dbg: {:?}", *token);
+        }
+
         const auto args = split(line, " ");
 
-        if (args.empty()) {
+        if (args.empty())
+        {
             continue;
         }
 
-        if (std::cout.eof() || args[0] == "exit") {
+        if (std::cout.eof() || args[0] == "exit")
+        {
             break;
         }
 
         const pid_t pid = vfork();
 
-        if (pid == -1) {
+        if (pid == -1)
+        {
             exit(1);
         }
 
-        if (pid == 0) {
+        if (pid == 0)
+        {
             const ArgsToExec exec{args};
             const auto args_to_pass = exec.args()->get();
 

@@ -1,0 +1,14 @@
+cc_binary(
+    name = "testsh",
+    srcs = [
+        "src/builtin/cd.cpp",
+        "src/builtin/cd.h",
+        "src/main.cpp",
+        "src/util.h",
+        "src/tokenizer/tokenizer.cpp",
+        "src/tokenizer/tokenizer.h",
+    ],
+    deps = [
+        "@re2",
+    ],
+)

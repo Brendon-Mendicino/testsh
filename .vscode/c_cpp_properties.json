@@ -3,14 +3,13 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/bazel-testsh/external/re2+"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/clang",
+            "compilerPath": "/usr/bin/clang-20",
             "cStandard": "c23",
-            "cppStandard": "c++23",
-            "intelliSenseMode": "linux-clang-x64",
-            "configurationProvider": "ms-vscode.cmake-tools"
+            "cppStandard": "c++23"
         }
     ],
     "version": 4

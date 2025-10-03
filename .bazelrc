@@ -1,0 +1,6 @@
+build --cxxopt=-std=c++23
+
+build --cxxopt=-Wall
+
+# https://bazel.build/configure/best-practices#bazelrc-file
+try-import %workspace%/user.bazelrc

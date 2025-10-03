@@ -1,0 +1,8 @@
+"let's see if i can build a shell"
+
+module(
+    name = "testsh",
+    version = "0.1",
+)
+
+bazel_dep(name = "re2", version = "2025-08-12")
