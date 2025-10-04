@@ -8,6 +8,8 @@ cc_binary(
         "src/util.cpp",
         "src/parser/syntax.h",
         "src/parser/syntax.cpp",
+        "src/parser/executor.h",
+        "src/parser/executor.cpp",
         "src/parser/tokenizer.cpp",
         "src/parser/tokenizer.h",
     ],

@@ -19,11 +19,42 @@ static const std::vector<Specification> specs{
 
     {R"(^("[^']"))", TokenType::string},
     {R"(^('[^']'))", TokenType::string},
+
+    {R"(^(!))", TokenType::bang},
 };
 
 Tokenizer::Tokenizer(std::string_view input) : input(input) {}
 
 std::optional<Token> Tokenizer::next_token()
+{
+    std::string_view match{};
+
+    for (const auto &spec : specs)
+    {
+        if (!RE2::PartialMatch(this->input, spec.regex, &match))
+            continue;
+
+        const Token token{
+            .type = spec.spec_type,
+            .value = match,
+            .start = this->string_offset,
+            .end = this->string_offset + match.length()};
+
+        assert(match.length() <= this->input.length());
+
+        this->input = this->input.substr(match.length());
+        this->string_offset += match.length();
+
+        if (token.type == TokenType::separator)
+            continue;
+
+        return token;
+    }
+
+    return std::nullopt;
+}
+
+std::optional<Token> Tokenizer::next_token_with_separators()
 {
     std::string_view match{};
 

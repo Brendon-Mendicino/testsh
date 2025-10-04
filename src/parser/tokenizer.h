@@ -16,6 +16,7 @@ enum class TokenType
     separator,
     new_line,
     semicolon,
+    bang,
     open_paren,
     close_paren,
     eof,
@@ -45,6 +46,8 @@ public:
 
     std::optional<Token> next_token();
 
+    std::optional<Token> next_token_with_separators();
+
     std::optional<Token> peek() const;
 };
 
@@ -64,6 +67,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "new_line";
     case TokenType::semicolon:
         return "semicolon";
+    case TokenType::bang:
+        return "bang";
     case TokenType::open_paren:
         return "open_paren";
     case TokenType::close_paren:

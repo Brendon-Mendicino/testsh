@@ -45,3 +45,11 @@ std::vector<std::string_view> split_sv(std::string_view s, std::string_view deli
 
     return tokens;
 }
+
+constexpr std::string pretty_space_add(std::string_view s)
+{
+    using namespace std::literals;
+
+    const auto v = split_sv(s, "\n"sv) | std::views::join_with("\n    "sv);
+    return std::string(v.begin(), v.end());
+}
