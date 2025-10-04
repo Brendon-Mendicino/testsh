@@ -10,18 +10,21 @@
 
 enum class TokenType
 {
-    argument,
+    number,
+    word,
     string,
     separator,
     new_line,
     semicolon,
+    open_paren,
+    close_paren,
     eof,
 };
 
 struct Token
 {
     TokenType type;
-    std::string value;
+    std::string_view value;
     size_t start;
     size_t end;
 };
@@ -36,20 +39,23 @@ class Tokenizer
 {
     std::string_view input;
     size_t string_offset = 0;
-    bool eof_reached = false;
 
 public:
     Tokenizer(std::string_view input);
 
     std::optional<Token> next_token();
+
+    std::optional<Token> peek() const;
 };
 
 constexpr std::string_view to_string(const TokenType token)
 {
     switch (token)
     {
-    case TokenType::argument:
-        return "argument";
+    case TokenType::number:
+        return "number";
+    case TokenType::word:
+        return "word";
     case TokenType::separator:
         return "separator";
     case TokenType::string:
@@ -58,6 +64,10 @@ constexpr std::string_view to_string(const TokenType token)
         return "new_line";
     case TokenType::semicolon:
         return "semicolon";
+    case TokenType::open_paren:
+        return "open_paren";
+    case TokenType::close_paren:
+        return "close_paren";
     case TokenType::eof:
         return "eof";
     }
@@ -73,7 +83,7 @@ struct std::formatter<Token> : debug_spec
         // Print regex pattern and token type
         return std::format_to(
             ctx.out(),
-            // compiler state is garbage...
+            // TODO: compiler state is garbage...
             // "Token(type={}, value={:?}, start={}, end={})",
             "Token(type={}, value={}, start={}, end={})",
             to_string(token.type),
@@ -91,6 +101,8 @@ struct std::formatter<Specification> : debug_spec
         // Print regex pattern and token type
         return std::format_to(
             ctx.out(),
+            // TODO: compiler state is garbage...
+            // "Specification(regex={:?}, type={})",
             "Specification(regex={}, type={})",
             spec.regex,
             to_string(spec.spec_type));

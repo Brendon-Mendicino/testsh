@@ -5,8 +5,11 @@ cc_binary(
         "src/builtin/cd.h",
         "src/main.cpp",
         "src/util.h",
-        "src/tokenizer/tokenizer.cpp",
-        "src/tokenizer/tokenizer.h",
+        "src/util.cpp",
+        "src/parser/syntax.h",
+        "src/parser/syntax.cpp",
+        "src/parser/tokenizer.cpp",
+        "src/parser/tokenizer.h",
     ],
     deps = [
         "@re2",

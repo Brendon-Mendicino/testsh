@@ -11,8 +11,11 @@ static const std::vector<Specification> specs{
     {R"(^(\n))", TokenType::new_line},
     {R"(^(;))", TokenType::semicolon},
 
+    {R"(^(\z))", TokenType::eof},
+
     // Argument kinds
-    {R"(^(\w+))", TokenType::argument},
+    {R"(^(\d+))", TokenType::number},
+    {R"(^(\w+))", TokenType::word},
 
     {R"(^("[^']"))", TokenType::string},
     {R"(^('[^']'))", TokenType::string},
@@ -31,7 +34,7 @@ std::optional<Token> Tokenizer::next_token()
 
         const Token token{
             .type = spec.spec_type,
-            .value = std::string{match},
+            .value = match,
             .start = this->string_offset,
             .end = this->string_offset + match.length()};
 
@@ -43,16 +46,12 @@ std::optional<Token> Tokenizer::next_token()
         return token;
     }
 
-    if (this->input.length() == 0 && !this->eof_reached)
-    {
-        this->eof_reached = true;
-
-        return Token{
-            .type = TokenType::eof,
-            .value = "",
-            .start = this->string_offset,
-            .end = this->string_offset};
-    }
-
     return std::nullopt;
+}
+
+std::optional<Token> Tokenizer::peek() const
+{
+    Tokenizer copy{*this};
+
+    return copy.next_token();
 }
