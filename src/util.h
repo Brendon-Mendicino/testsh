@@ -7,6 +7,10 @@
 #include <vector>
 #include <ranges>
 #include <iomanip>
+#include <memory>
+#include <optional>
+#include <cstdlib>
+#include <cxxabi.h>
 
 // helper type for the visitor
 template <class... Ts>
@@ -72,7 +76,27 @@ std::vector<std::string> split(const std::string &s, std::string_view delimiter)
 
 std::vector<std::string_view> split_sv(std::string_view s, std::string_view delimiter);
 
-constexpr std::string pretty_space_add(std::string_view s);
+template <typename T>
+concept HasFormatter =
+    requires(T value, std::format_context &ctx, std::formatter<T> fmt) {
+        { fmt.format(value, ctx) } -> std::same_as<typename std::format_context::iterator>;
+    };
+
+template <typename T>
+inline std::string typeid_name()
+{
+    int status;
+    char *realname = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
+
+    if (realname == nullptr || status != 0)
+        throw std::runtime_error(std::format("typeid.name retrieval failed! status={}", status));
+
+    std::string name{realname};
+
+    std::free(realname);
+
+    return name;
+}
 
 template <typename T, typename CharT>
 struct std::formatter<std::vector<T>, CharT>
@@ -87,7 +111,8 @@ struct std::formatter<std::vector<T>, CharT>
     }
 
     template <typename FormatContext>
-    auto format(const std::vector<T> &vec, FormatContext &ctx) const
+    typename FormatContext::iterator
+    format(const std::vector<T> &vec, FormatContext &ctx) const
     {
         auto out = ctx.out();
         *out++ = '[';
@@ -104,6 +129,74 @@ struct std::formatter<std::vector<T>, CharT>
 
         *out++ = ']';
         return out;
+    }
+};
+
+template <typename T, typename CharT>
+struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
+{
+
+    template <typename FormatContext>
+    typename FormatContext::iterator
+    format(const std::unique_ptr<T> &ptr, FormatContext &ctx) const
+    {
+        // Reuse existing formatter for elements
+        std::formatter<T, CharT> elem_fmt{*this};
+
+        const T &elem = *ptr;
+
+        std::format_to(ctx.out(), "unique_ptr(");
+        elem_fmt.format(elem, ctx);
+        return std::format_to(ctx.out(), ")");
+    }
+};
+
+// template specialization for a std::variant
+// whose types already have a formatter.
+template <typename... Types>
+struct std::formatter<std::variant<Types...>> : debug_spec
+{
+    using VarType = std::variant<Types...>;
+
+    auto format(const VarType &v, auto &ctx) const
+    {
+        return std::visit(
+            [&]<HasFormatter T>(const T &p)
+            {
+                const std::formatter<T> fmt{*this};
+                return fmt.format(p, ctx);
+            },
+            v);
+    }
+};
+
+// template specialization for a std::optional
+template <typename T, typename CharT>
+struct std::formatter<std::optional<T>, CharT> : debug_spec
+{
+    // Reuse existing formatter for elements
+    std::formatter<T, CharT> elem_fmt;
+
+    // parse optional format specifiers (forward to element formatter)
+    constexpr auto parse(std::basic_format_parse_context<CharT> &ctx)
+    {
+        return elem_fmt.parse(ctx);
+    }
+
+    template <typename FormatContext>
+    typename FormatContext::iterator
+    format(const std::optional<T> &ptr, FormatContext &ctx) const
+    {
+        if (ptr.has_value())
+        {
+            std::format_to(ctx.out(), "Some(");
+            elem_fmt.format(*ptr, ctx);
+            return std::format_to(ctx.out(), ")");
+        }
+        else
+        {
+            return std::format_to(ctx.out(), "None");
+        }
     }
 };
 

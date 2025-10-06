@@ -7,6 +7,8 @@
 #include <format>
 #include <variant>
 #include <print>
+#include <memory>
+#include <utility>
 #include "../util.h"
 
 struct Program
@@ -20,17 +22,49 @@ struct StatusNeg
     Program prog;
 };
 
-struct Script
-{
-    using Node = std::variant<Program, StatusNeg>;
+using Words = std::variant<Program, StatusNeg>;
 
-    Node value;
+struct AndList;
+struct OrList;
+struct SequentialList;
+
+using List = std::variant<AndList, OrList, SequentialList, Words>;
+
+struct AndList
+{
+    std::unique_ptr<List> left;
+    std::unique_ptr<List> right;
+};
+
+struct OrList
+{
+    std::unique_ptr<List> left;
+    std::unique_ptr<List> right;
+};
+
+struct SequentialList
+{
+    std::unique_ptr<List> left;
+    std::unique_ptr<List> right;
 };
 
 class SyntaxTree
 {
+    template <typename ListFn>
+    inline std::optional<List> variant_list(Tokenizer &tokenizer, ListFn fn) const;
+
 public:
-    std::optional<Script> build(Tokenizer &tokenizer);
+    std::optional<List> build(Tokenizer &tokenizer);
+
+    std::optional<List> list(Tokenizer &tokenizer) const;
+
+    std::optional<AndList> and_list(Tokenizer &tokenizer) const;
+
+    std::optional<OrList> or_list(Tokenizer &tokenizer) const;
+
+    std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
+
+    std::optional<Words> words(Tokenizer &tokenizer) const;
 
     std::optional<Program> program(Tokenizer &tokenizer) const;
 
@@ -92,28 +126,36 @@ struct std::formatter<StatusNeg> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<Script> : debug_spec
-{
-    auto format(const Script &v, auto &ctx) const
-    {
-        return std::visit(
-            [&](const auto &p)
-            {
-                if (this->pretty)
-                {
-                    const std::string sspaces(this->spaces, ' ');
+template <typename T>
+concept HasLeftRight = requires(T t) {
+    t.left;
+    t.right;
+};
 
-                    std::format_to(ctx.out(), "Script(\n{}value=", sspaces);
-                    this->p_format(p, ctx);
-                    return std::format_to(ctx.out(), ")");
-                }
-                else
-                {
-                    return std::format_to(ctx.out(), "Script(value={:?})", p);
-                }
-            },
-            v.value);
+template <HasLeftRight T>
+struct std::formatter<T> : debug_spec
+{
+    auto format(const T &node, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            const std::string sspaces(this->spaces, ' ');
+
+            std::format_to(ctx.out(), "{}(\n{}left=", typeid_name<T>(), sspaces);
+            this->p_format(node.left, ctx);
+            std::format_to(ctx.out(), ",\n{}right=", sspaces);
+            this->p_format(node.right, ctx);
+            return std::format_to(ctx.out(), ")");
+        }
+        else
+        {
+            return std::format_to(
+                ctx.out(),
+                "{}(left={:?}, right={:?})",
+                typeid_name<T>(),
+                node.left,
+                node.right);
+        }
     }
 };
 

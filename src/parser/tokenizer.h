@@ -16,6 +16,8 @@ enum class TokenType
     separator,
     new_line,
     semicolon,
+    and_and,
+    or_or,
     bang,
     open_paren,
     close_paren,
@@ -48,6 +50,8 @@ public:
 
     std::optional<Token> next_token_with_separators();
 
+    bool next_is_eof() const;
+
     std::optional<Token> peek() const;
 };
 
@@ -67,6 +71,10 @@ constexpr std::string_view to_string(const TokenType token)
         return "new_line";
     case TokenType::semicolon:
         return "semicolon";
+    case TokenType::and_and:
+        return "and_and";
+    case TokenType::or_or:
+        return "or_or";
     case TokenType::bang:
         return "bang";
     case TokenType::open_paren:

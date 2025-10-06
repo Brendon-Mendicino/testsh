@@ -8,12 +8,15 @@
 static const std::vector<Specification> specs{
     // Separators
     {R"(^( +))", TokenType::separator},
-    {R"(^(\n))", TokenType::new_line},
+
+    // List separators
     {R"(^(;))", TokenType::semicolon},
+    {R"(^(&&))", TokenType::and_and},
+    {R"(^(\|\|))", TokenType::or_or},
 
-    {R"(^(\z))", TokenType::eof},
+    {R"(^(\n))", TokenType::new_line},
 
-    // Argument kinds
+    // word kinds
     {R"(^(\d+))", TokenType::number},
     {R"(^(\w+))", TokenType::word},
 
@@ -21,6 +24,8 @@ static const std::vector<Specification> specs{
     {R"(^('[^']'))", TokenType::string},
 
     {R"(^(!))", TokenType::bang},
+
+    {R"(^(\z))", TokenType::eof},
 };
 
 Tokenizer::Tokenizer(std::string_view input) : input(input) {}
@@ -78,6 +83,14 @@ std::optional<Token> Tokenizer::next_token_with_separators()
     }
 
     return std::nullopt;
+}
+
+bool Tokenizer::next_is_eof() const
+{
+    if(const auto next = this->peek())
+        return next->type == TokenType::eof;
+
+    return false;
 }
 
 std::optional<Token> Tokenizer::peek() const

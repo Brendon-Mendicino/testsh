@@ -93,21 +93,21 @@ ExecStats Executor::execute()
     Tokenizer tokenizer{this->input};
     SyntaxTree tree;
 
-    const auto script = tree.build(tokenizer);
+    const auto words = tree.build(tokenizer);
 
-    if (!script.has_value())
+    if (!words.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    std::println("{:#?}", *script);
+    std::println("{:#?}", *words);
 
-    const auto stats = std::visit(
-        overloads{
-            [&](const Program &p)
-            { return this->execute_program(p); },
-            [&](const StatusNeg &p)
-            { return this->negate(p.prog); },
-        },
-        script->value);
+    // const auto stats = std::visit(
+    //     overloads{
+    //         [&](const Program &p)
+    //         { return this->execute_program(p); },
+    //         [&](const StatusNeg &p)
+    //         { return this->negate(p.prog); },
+    //     },
+    //     w);
 
-    return stats;
+    return {};
 }
