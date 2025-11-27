@@ -1,41 +1,59 @@
 #include "syntax.h"
 #include <print>
 
-template <typename ListFn>
-inline std::optional<List> SyntaxTree::variant_list(Tokenizer &tokenizer, ListFn fn) const
+template <typename VariantType, typename Fn>
+inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn) const
 {
     Tokenizer sub_tok{tokenizer};
 
     if (auto list = (this->*fn)(sub_tok))
     {
-        if (sub_tok.next_is_eof())
-        {
-            tokenizer = sub_tok;
-            return List{std::move(*list)};
-        }
+        tokenizer = sub_tok;
+        return VariantType{std::move(*list)};
     }
 
     return std::nullopt;
 }
 
-std::optional<List> SyntaxTree::build(Tokenizer &tokenizer)
+std::optional<OpList> SyntaxTree::build(Tokenizer &tokenizer)
 {
-    return this->list(tokenizer);
+    return this->op_list(tokenizer);
 }
 
-std::optional<List> SyntaxTree::list(Tokenizer &tokenizer) const
+std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) const
 {
-    if (auto words = this->variant_list(tokenizer, &SyntaxTree::words))
-        return words;
+    auto left = this->op_list(tokenizer);
+    if (!left.has_value())
+        return std::nullopt;
 
-    if (auto and_list = this->variant_list(tokenizer, &SyntaxTree::and_list))
+    const auto semi = tokenizer.next_token();
+    if (!semi.has_value())
+        return std::nullopt;
+
+    if (semi->type != TokenType::semicolon)
+        return std::nullopt;
+
+    auto right = this->op_list(tokenizer);
+
+    return SequentialList{
+        .left = std::make_unique<OpList>(std::move(*left)),
+        .right =
+            !right.has_value()
+                ? std::nullopt
+                : make_optptr<OpList>(std::move(*right)),
+    };
+}
+
+std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
+{
+    if (auto and_list = this->check<AndList>(tokenizer, &SyntaxTree::and_list))
         return and_list;
 
-    if (auto or_list = this->variant_list(tokenizer, &SyntaxTree::or_list))
+    if (auto or_list = this->check<OrList>(tokenizer, &SyntaxTree::or_list))
         return or_list;
 
-    if (auto sequential_list = this->variant_list(tokenizer, &SyntaxTree::sequential_list))
-        return sequential_list;
+    if (auto words = this->check<Words>(tokenizer, &SyntaxTree::words))
+        return words;
 
     return std::nullopt;
 }
@@ -53,13 +71,13 @@ std::optional<AndList> SyntaxTree::and_list(Tokenizer &tokenizer) const
     if (sep->type != TokenType::and_and)
         return std::nullopt;
 
-    auto right = this->list(tokenizer);
+    auto right = this->op_list(tokenizer);
     if (!right.has_value())
         return std::nullopt;
 
     return AndList{
-        .left = std::make_unique<List>(std::move(*left)),
-        .right = std::make_unique<List>(std::move(*right)),
+        .left = std::make_unique<OpList>(std::move(*left)),
+        .right = std::make_unique<OpList>(std::move(*right)),
     };
 }
 
@@ -76,37 +94,13 @@ std::optional<OrList> SyntaxTree::or_list(Tokenizer &tokenizer) const
     if (sep->type != TokenType::or_or)
         return std::nullopt;
 
-    auto right = this->list(tokenizer);
+    auto right = this->op_list(tokenizer);
     if (!right.has_value())
         return std::nullopt;
 
     return OrList{
-        .left = std::make_unique<List>(std::move(*left)),
-        .right = std::make_unique<List>(std::move(*right)),
-    };
-}
-
-// TODO: modify
-std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) const
-{
-    auto left = this->words(tokenizer);
-    if (!left.has_value())
-        return std::nullopt;
-
-    const auto sep = tokenizer.next_token();
-    if (!sep.has_value())
-        return std::nullopt;
-
-    if (sep->type != TokenType::semicolon)
-        return std::nullopt;
-
-    auto right = this->list(tokenizer);
-    if (!right.has_value())
-        return std::nullopt;
-
-    return SequentialList{
-        .left = std::make_unique<List>(std::move(*left)),
-        .right = std::make_unique<List>(std::move(*right)),
+        .left = std::make_unique<OpList>(std::move(*left)),
+        .right = std::make_unique<OpList>(std::move(*right)),
     };
 }
 

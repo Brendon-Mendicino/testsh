@@ -19,6 +19,16 @@ struct overloads : Ts...
     using Ts::operator()...;
 };
 
+// Helper type for an optional pointer
+template <typename T>
+using optional_ptr = std::optional<std::unique_ptr<T>>;
+
+template <typename T, typename... Args>
+constexpr inline optional_ptr<T> make_optptr(Args &&...args)
+{
+    return std::optional<std::unique_ptr<T>>{std::make_unique<T>(std::forward<Args>(args)...)};
+}
+
 // helper for assigning debug format to a std::formatter
 struct debug_spec
 {

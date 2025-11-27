@@ -26,37 +26,36 @@ using Words = std::variant<Program, StatusNeg>;
 
 struct AndList;
 struct OrList;
-struct SequentialList;
 
-using List = std::variant<AndList, OrList, SequentialList, Words>;
+using OpList = std::variant<AndList, OrList, Words>;
 
 struct AndList
 {
-    std::unique_ptr<List> left;
-    std::unique_ptr<List> right;
+    std::unique_ptr<OpList> left;
+    std::unique_ptr<OpList> right;
 };
 
 struct OrList
 {
-    std::unique_ptr<List> left;
-    std::unique_ptr<List> right;
+    std::unique_ptr<OpList> left;
+    std::unique_ptr<OpList> right;
 };
 
 struct SequentialList
 {
-    std::unique_ptr<List> left;
-    std::unique_ptr<List> right;
+    std::unique_ptr<OpList> left;
+    optional_ptr<OpList> right;
 };
 
 class SyntaxTree
 {
-    template <typename ListFn>
-    inline std::optional<List> variant_list(Tokenizer &tokenizer, ListFn fn) const;
+    template <typename VariantType, typename Fn>
+    inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
 
 public:
-    std::optional<List> build(Tokenizer &tokenizer);
+    std::optional<OpList> build(Tokenizer &tokenizer);
 
-    std::optional<List> list(Tokenizer &tokenizer) const;
+    std::optional<OpList> op_list(Tokenizer &tokenizer) const;
 
     std::optional<AndList> and_list(Tokenizer &tokenizer) const;
 

@@ -1,5 +1,6 @@
 {
     "files.associations": {
+        "*.bazelrc": "starlark",
         "vector": "cpp",
         "format": "cpp",
         "optional": "cpp",
@@ -79,6 +80,7 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "valarray": "cpp",
-        "text_encoding": "cpp"
+        "text_encoding": "cpp",
+        "*.inc": "cpp"
     }
 }
