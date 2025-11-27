@@ -17,6 +17,10 @@ class Executor
 
     ExecStats execute_program(const Program &prog);
     ExecStats negate(const Program &prog);
+    ExecStats and_list(const AndList &and_list);
+    ExecStats or_list(const OrList &or_list);
+    ExecStats words(const Words &words);
+    ExecStats op_list(const OpList &list);
 
 public:
     Executor(std::string_view input);

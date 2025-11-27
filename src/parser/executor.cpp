@@ -85,6 +85,64 @@ ExecStats Executor::negate(const Program &prog)
     return stats;
 }
 
+ExecStats Executor::and_list(const AndList &and_list)
+{
+    const auto lhs = this->op_list(*and_list.left);
+
+    // Don't execute the rhs if the lhs terminated with an error
+    if (lhs.exit_code != 0) {
+        return lhs;
+    }
+
+    const auto rhs = this->op_list(*and_list.right);
+
+    return rhs;
+}
+
+ExecStats Executor::or_list(const OrList &or_list)
+{
+    const auto lhs = this->op_list(*or_list.left);
+
+    // Don't execute the rhs if the lhs terminated with a success
+    if (lhs.exit_code == 0) {
+        return lhs;
+    }
+
+    const auto rhs = this->op_list(*or_list.right);
+
+    return rhs;
+}
+
+ExecStats Executor::words(const Words &words)
+{
+    const auto stats = std::visit(
+        overloads {
+            [&](const Program &program)
+            { return this->execute_program(program); },
+            [&](const StatusNeg &status_neg)
+            { return this->negate(status_neg.prog); },
+        },
+        words);
+
+    return stats;
+}
+
+ExecStats Executor::op_list(const OpList &list)
+{
+    const auto stats = std::visit(
+        overloads {
+            [&](const AndList &and_list)
+            { return this->and_list(and_list); },
+            [&](const OrList &or_list)
+            { return this->or_list(or_list); },
+            [&](const Words &words)
+            { return this->words(words); },
+        },
+        list);
+
+    return stats;
+}
+
 Executor::Executor(std::string_view input) : input(input) {}
 
 // TODO: change retval
@@ -99,15 +157,9 @@ ExecStats Executor::execute()
         throw std::runtime_error("Parsing failed!");
 
     std::println("{:#?}", *words);
+    std::println("=== COMMAND BEGIN ===");
 
-    // const auto stats = std::visit(
-    //     overloads{
-    //         [&](const Program &p)
-    //         { return this->execute_program(p); },
-    //         [&](const StatusNeg &p)
-    //         { return this->negate(p.prog); },
-    //     },
-    //     w);
+    const auto retval = this->op_list(*words);
 
-    return {};
+    return retval;
 }
