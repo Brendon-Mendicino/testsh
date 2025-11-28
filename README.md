@@ -6,6 +6,11 @@ Run the project:
 bazel run :testsh
 ```
 
+Optimized build:
+```shell
+bazel build --config=opt :testsh
+```
+
 Debug the project:
 
 Run the VSCode task: `Build Testsh (Debug)` from the file `./.vscode/tasks.json`, and then run the VSCode debugger.

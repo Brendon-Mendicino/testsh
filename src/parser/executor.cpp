@@ -1,6 +1,8 @@
 #include "executor.h"
 #include "../util.h"
 #include "../builtin/builtin.h"
+#include <iostream>
+#include <string>
 #include <variant>
 #include <memory>
 #include <unistd.h>
@@ -51,7 +53,7 @@ public:
     }
 };
 
-std::optional<ExecStats> Executor::builtin(const Program &prog)
+std::optional<ExecStats> Executor::builtin(const Program &prog) const
 {
     if (prog.program == "cd")
     {
@@ -64,7 +66,7 @@ std::optional<ExecStats> Executor::builtin(const Program &prog)
     return std::nullopt;
 }
 
-ExecStats Executor::execute_program(const Program &prog)
+ExecStats Executor::execute_program(const Program &prog) const
 {
     // Check if a builtin can be run first before, before running
     // the program through exec().
@@ -100,7 +102,7 @@ ExecStats Executor::execute_program(const Program &prog)
 }
 
 // TODO: move to builtin
-ExecStats Executor::negate(const Program &prog)
+ExecStats Executor::negate(const Program &prog) const
 {
     auto stats = this->execute_program(prog);
 
@@ -109,7 +111,7 @@ ExecStats Executor::negate(const Program &prog)
     return stats;
 }
 
-ExecStats Executor::and_list(const AndList &and_list)
+ExecStats Executor::and_list(const AndList &and_list) const
 {
     const auto lhs = this->op_list(*and_list.left);
 
@@ -124,7 +126,7 @@ ExecStats Executor::and_list(const AndList &and_list)
     return rhs;
 }
 
-ExecStats Executor::or_list(const OrList &or_list)
+ExecStats Executor::or_list(const OrList &or_list) const
 {
     const auto lhs = this->op_list(*or_list.left);
 
@@ -139,7 +141,7 @@ ExecStats Executor::or_list(const OrList &or_list)
     return rhs;
 }
 
-ExecStats Executor::words(const Words &words)
+ExecStats Executor::words(const Words &words) const
 {
     const auto stats = std::visit(
         overloads{
@@ -153,7 +155,7 @@ ExecStats Executor::words(const Words &words)
     return stats;
 }
 
-ExecStats Executor::op_list(const OpList &list)
+ExecStats Executor::op_list(const OpList &list) const
 {
     const auto stats = std::visit(
         overloads{
@@ -169,7 +171,7 @@ ExecStats Executor::op_list(const OpList &list)
     return stats;
 }
 
-ExecStats Executor::sequential_list(const SequentialList &sequential_list)
+ExecStats Executor::sequential_list(const SequentialList &sequential_list) const
 {
     if (sequential_list.left.has_value())
     {
@@ -180,7 +182,7 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list)
     return stats;
 }
 
-ExecStats Executor::command(const Command &command)
+ExecStats Executor::command(const Command &command) const
 {
     const auto stats = std::visit(
         overloads{
@@ -194,7 +196,7 @@ ExecStats Executor::command(const Command &command)
     return stats;
 }
 
-ExecStats Executor::subshell(const Subshell &subshell)
+ExecStats Executor::subshell(const Subshell &subshell) const
 {
     ExecStats retval{};
 
@@ -226,12 +228,66 @@ ExecStats Executor::subshell(const Subshell &subshell)
     return retval;
 }
 
-Executor::Executor(std::string_view input) : input(input) {}
-
-// TODO: change retval
-ExecStats Executor::execute()
+bool Executor::line_has_continuation() const
 {
-    Tokenizer tokenizer{this->input};
+    assert(!this->input_buffer.empty());
+
+    UnbufferedTokenizer tokenizer{this->input_buffer.back()};
+
+    TokenType prev = TokenType::eof;
+    TokenType next =
+        tokenizer
+            .next_token()
+            .transform([](const Token &&token)
+                       { return token.type; })
+            .value_or(TokenType::eof);
+
+    while (next != TokenType::eof)
+    {
+        prev = next;
+
+        next =
+            tokenizer
+                .next_token()
+                .transform([](const Token &&token)
+                           { return token.type; })
+                .value_or(TokenType::eof);
+    }
+
+    return prev == TokenType::line_continuation || prev == TokenType::and_and || prev == TokenType::or_or;
+}
+
+void Executor::read_stdin()
+{
+    std::string new_line;
+    std::getline(std::cin, new_line);
+
+    this->input_buffer.emplace_back(std::move(new_line));
+}
+
+void Executor::execute() const
+{
+    // Create a support buffer where the line_continuations are cut
+    // and the subsequent lines are pasted togheter
+    std::vector<std::string> support;
+
+    for (const auto &line : this->input_buffer)
+    {
+        if (support.size() == 0)
+        {
+            support.emplace_back(line);
+            continue;
+        }
+
+        auto &last = support.back();
+
+        if (last.back() == '\\')
+            last = last.substr(0, last.size() - 1) + line;
+        else
+            support.emplace_back(line);
+    }
+
+    Tokenizer tokenizer{support};
     SyntaxTree tree;
 
     const auto program = tree.build(tokenizer);
@@ -239,12 +295,25 @@ ExecStats Executor::execute()
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    std::println("=== SYNTAX TREE ===");
-    std::println("{:#?}", *program);
+    // std::println("=== SYNTAX TREE ===");
+    // std::println("{:#?}", *program);
 
-    std::println("=== COMMAND BEGIN ===");
+    // std::println("=== COMMAND BEGIN ===");
 
     const auto retval = this->sequential_list(*program);
+}
 
-    return retval;
+TerminalState Executor::update()
+{
+    this->read_stdin();
+
+    if (this->line_has_continuation())
+    {
+        return {.needs_more = true};
+    }
+
+    this->execute();
+    this->input_buffer.clear();
+
+    return {};
 }

@@ -6,6 +6,7 @@
 #include <format>
 #include <optional>
 #include <utility>
+#include <span>
 #include "../util.h"
 
 enum class TokenType
@@ -21,6 +22,7 @@ enum class TokenType
     bang,
     open_round,
     close_round,
+    line_continuation,
     eof,
 };
 
@@ -38,13 +40,35 @@ struct Specification
     TokenType spec_type;
 };
 
-class Tokenizer
+/**
+ * Use UnbufferedTokenizer to process a single line of
+ * the user input.
+ */
+class UnbufferedTokenizer
 {
     std::string_view input;
     size_t string_offset = 0;
 
 public:
-    Tokenizer(std::string_view input);
+    UnbufferedTokenizer(std::string_view input);
+
+    std::optional<Token> next_token();
+
+    std::optional<Token> next_token_with_separators();
+
+    bool next_is_eof() const;
+
+    std::optional<Token> peek() const;
+};
+
+class Tokenizer
+{
+    std::span<std::string> buffered_input;
+    UnbufferedTokenizer inner_tokenizer;
+
+    bool advance_buffer();
+public:
+    Tokenizer(std::span<std::string> buffered_input);
 
     std::optional<Token> next_token();
 
@@ -81,6 +105,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "open_round";
     case TokenType::close_round:
         return "close_round";
+    case TokenType::line_continuation:
+        return "line_continuation";
     case TokenType::eof:
         return "eof";
     }

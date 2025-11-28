@@ -2,5 +2,8 @@ build --cxxopt=-std=c++23
 
 build --cxxopt=-Wall
 
+build:opt --compilation_mode=opt
+build:opt --copt=-O3
+
 # https://bazel.build/configure/best-practices#bazelrc-file
 try-import %workspace%/user.bazelrc

@@ -15,33 +15,25 @@
 
 namespace rng = std::ranges::views;
 
-struct Terminal
-{
-    int status;
-};
-
 int main()
 {
-    std::string line{};
-    Terminal term_state{};
+    TerminalState state{};
+    Executor executor{};
 
     while (true)
     {
-        if (term_state.status != 0)
+        if (state.terminate_session)
         {
-            std::println("PREV STATUS: {}", term_state.status);
+            break;
         }
 
-        std::print("$ ");
+        if (state.needs_more)
+            std::print("> ");
+        else
+            std::print("$ ");
         std::cout << std::flush;
 
-        std::getline(std::cin, line);
-
-        Executor executor{line};
-
-        const auto stats = executor.execute();
-
-        term_state.status = stats.exit_code;
+        state = executor.update();
     }
 
     return 0;
