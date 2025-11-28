@@ -1,5 +1,6 @@
 #include "executor.h"
 #include "../util.h"
+#include "../builtin/builtin.h"
 #include <variant>
 #include <memory>
 #include <unistd.h>
@@ -50,17 +51,36 @@ public:
     }
 };
 
+std::optional<ExecStats> Executor::builtin(const Program &prog)
+{
+    if (prog.program == "cd")
+    {
+        const int exit_code = builtin_cd(prog.arguments);
+        return ExecStats{
+            .exit_code = exit_code,
+        };
+    }
+
+    return std::nullopt;
+}
+
 ExecStats Executor::execute_program(const Program &prog)
 {
-    const pid_t pid = fork();
+    // Check if a builtin can be run first before, before running
+    // the program through exec().
+    const auto builtin_run = this->builtin(prog);
+    if (builtin_run)
+        return *builtin_run;
 
+    const pid_t pid = fork();
     if (pid == -1)
     {
-        exit(1);
+        throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
     }
 
     if (pid == 0)
     {
+        // Child
         const ArgsToExec exec{prog};
         const auto args_to_pass = exec.args()->get();
 
@@ -68,6 +88,7 @@ ExecStats Executor::execute_program(const Program &prog)
         exit(1);
     }
 
+    // Parent
     int child_status;
     pid_t child_wait = waitpid(pid, &child_status, 0);
     if (child_wait != pid)
@@ -93,7 +114,8 @@ ExecStats Executor::and_list(const AndList &and_list)
     const auto lhs = this->op_list(*and_list.left);
 
     // Don't execute the rhs if the lhs terminated with an error
-    if (lhs.exit_code != 0) {
+    if (lhs.exit_code != 0)
+    {
         return lhs;
     }
 
@@ -107,7 +129,8 @@ ExecStats Executor::or_list(const OrList &or_list)
     const auto lhs = this->op_list(*or_list.left);
 
     // Don't execute the rhs if the lhs terminated with a success
-    if (lhs.exit_code == 0) {
+    if (lhs.exit_code == 0)
+    {
         return lhs;
     }
 
@@ -119,7 +142,7 @@ ExecStats Executor::or_list(const OrList &or_list)
 ExecStats Executor::words(const Words &words)
 {
     const auto stats = std::visit(
-        overloads {
+        overloads{
             [&](const Program &program)
             { return this->execute_program(program); },
             [&](const StatusNeg &status_neg)
@@ -133,7 +156,7 @@ ExecStats Executor::words(const Words &words)
 ExecStats Executor::op_list(const OpList &list)
 {
     const auto stats = std::visit(
-        overloads {
+        overloads{
             [&](const AndList &and_list)
             { return this->and_list(and_list); },
             [&](const OrList &or_list)
@@ -160,7 +183,7 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list)
 ExecStats Executor::command(const Command &command)
 {
     const auto stats = std::visit(
-        overloads {
+        overloads{
             [&](const Words &words)
             { return this->words(words); },
             [&](const Subshell &subshell)
@@ -188,19 +211,17 @@ ExecStats Executor::subshell(const Subshell &subshell)
         const auto child_status = this->sequential_list(*subshell.seq_list);
         exit(child_status.exit_code);
     }
-    else
+
+    // Parent
+    int wstatus{};
+    waitpid(pid, &wstatus, 0);
+
+    if (!WIFEXITED(wstatus))
     {
-        // Parent
-        int wstatus{};
-        waitpid(pid, &wstatus, 0);
-
-        if (!WIFEXITED(wstatus))
-        {
-            throw std::runtime_error("Child did not return!");
-        }
-
-        retval.exit_code = WEXITSTATUS(wstatus);
+        throw std::runtime_error("Child did not return!");
     }
+
+    retval.exit_code = WEXITSTATUS(wstatus);
 
     return retval;
 }

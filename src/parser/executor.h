@@ -15,6 +15,7 @@ class Executor
 {
     std::string_view input;
 
+    std::optional<ExecStats> builtin(const Program &prog);
     ExecStats execute_program(const Program &prog);
     ExecStats negate(const Program &prog);
     ExecStats and_list(const AndList &and_list);

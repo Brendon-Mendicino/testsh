@@ -5,9 +5,10 @@
 #ifndef TESTSH_CD_H
 #define TESTSH_CD_H
 
+#include <vector>
+#include <string_view>
 
-class cd {
-};
+int builtin_cd(const std::vector<std::string_view> &args);
 
 
 #endif //TESTSH_CD_H

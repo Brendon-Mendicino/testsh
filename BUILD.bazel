@@ -3,6 +3,7 @@ cc_binary(
     srcs = [
         "src/builtin/cd.cpp",
         "src/builtin/cd.h",
+        "src/builtin/builtin.h",
         "src/main.cpp",
         "src/util.h",
         "src/util.cpp",
