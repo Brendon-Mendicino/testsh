@@ -57,10 +57,6 @@ public:
 
     std::optional<OpList> op_list(Tokenizer &tokenizer) const;
 
-    std::optional<AndList> and_list(Tokenizer &tokenizer) const;
-
-    std::optional<OrList> or_list(Tokenizer &tokenizer) const;
-
     std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
 
     std::optional<Words> words(Tokenizer &tokenizer) const;

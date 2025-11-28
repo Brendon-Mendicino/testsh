@@ -46,62 +46,68 @@ std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) 
 
 std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 {
-    if (auto and_list = this->check<AndList>(tokenizer, &SyntaxTree::and_list))
-        return and_list;
-
-    if (auto or_list = this->check<OrList>(tokenizer, &SyntaxTree::or_list))
-        return or_list;
-
-    if (auto words = this->check<Words>(tokenizer, &SyntaxTree::words))
-        return words;
-
-    return std::nullopt;
-}
-
-std::optional<AndList> SyntaxTree::and_list(Tokenizer &tokenizer) const
-{
-    auto left = this->words(tokenizer);
-    if (!left.has_value())
+    auto words = this->words(tokenizer);
+    if (!words.has_value())
+    {
         return std::nullopt;
+    }
 
-    const auto sep = tokenizer.next_token();
-    if (!sep.has_value())
-        return std::nullopt;
+    OpList retval = std::move(*words);
 
-    if (sep->type != TokenType::and_and)
-        return std::nullopt;
+    for (;;)
+    {
+        // Duplicate the tokenizer. By duplicating, if the parsing
+        // fails, the advancements are not committed to the original
+        // tokenizer.
+        Tokenizer sub_tok{tokenizer};
 
-    auto right = this->op_list(tokenizer);
-    if (!right.has_value())
-        return std::nullopt;
+        auto next_token = sub_tok.next_token();
+        if (!next_token.has_value())
+        {
+            break;
+        }
 
-    return AndList{
-        .left = std::make_unique<OpList>(std::move(*left)),
-        .right = std::make_unique<OpList>(std::move(*right)),
-    };
-}
+        // After this if the token is either and_and or or_or
+        if (next_token->type != TokenType::and_and && next_token->type != TokenType::or_or)
+        {
+            break;
+        }
 
-std::optional<OrList> SyntaxTree::or_list(Tokenizer &tokenizer) const
-{
-    auto left = this->words(tokenizer);
-    if (!left.has_value())
-        return std::nullopt;
+        // The next tokens must be a words
+        auto lhs_words = this->words(sub_tok);
+        if (!lhs_words.has_value())
+        {
+            break;
+        }
 
-    const auto sep = tokenizer.next_token();
-    if (!sep.has_value())
-        return std::nullopt;
+        if (next_token->type == TokenType::and_and)
+        {
+            AndList and_and{
+                .left = std::make_unique<OpList>(std::move(retval)),
+                .right = std::make_unique<OpList>(std::move(*lhs_words)),
+            };
 
-    if (sep->type != TokenType::or_or)
-        return std::nullopt;
+            retval = std::move(and_and);
+        }
+        else if (next_token->type == TokenType::or_or)
+        {
+            OrList or_or{
+                .left = std::make_unique<OpList>(std::move(retval)),
+                .right = std::make_unique<OpList>(std::move(*lhs_words)),
+            };
 
-    auto right = this->op_list(tokenizer);
-    if (!right.has_value())
-        return std::nullopt;
+            retval = std::move(or_or);
+        }
+        else
+        {
+            assertm(false, "Should not be here!");
+        }
 
-    return OrList{
-        .left = std::make_unique<OpList>(std::move(*left)),
-        .right = std::make_unique<OpList>(std::move(*right)),
-    };
+        // If the check passed advance the original tokenizer
+        tokenizer = sub_tok;
+    }
+
+    return retval;
 }
 
 std::optional<Words> SyntaxTree::words(Tokenizer &tokenizer) const

@@ -11,6 +11,10 @@
 #include <optional>
 #include <cstdlib>
 #include <cxxabi.h>
+#include <cassert>
+
+// helper function for assertions with message
+#define assertm(exp, msg)  assert((void(msg), exp))
 
 // helper type for the visitor
 template <class... Ts>
