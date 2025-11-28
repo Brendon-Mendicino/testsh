@@ -5,6 +5,9 @@
 #include <unistd.h>
 #include <wait.h>
 #include <print>
+#include <cerrno>
+#include <stdexcept>
+#include <cstring>
 
 class ArgsToExec
 {
@@ -135,8 +138,8 @@ ExecStats Executor::op_list(const OpList &list)
             { return this->and_list(and_list); },
             [&](const OrList &or_list)
             { return this->or_list(or_list); },
-            [&](const Words &words)
-            { return this->words(words); },
+            [&](const Command &command)
+            { return this->command(command); },
         },
         list);
 
@@ -152,6 +155,54 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list)
 
     const auto stats = this->op_list(*sequential_list.right);
     return stats;
+}
+
+ExecStats Executor::command(const Command &command)
+{
+    const auto stats = std::visit(
+        overloads {
+            [&](const Words &words)
+            { return this->words(words); },
+            [&](const Subshell &subshell)
+            { return this->subshell(subshell); },
+        },
+        command);
+
+    return stats;
+}
+
+ExecStats Executor::subshell(const Subshell &subshell)
+{
+    ExecStats retval{};
+
+    // TODO: move forking in it's own function
+    pid_t pid = fork();
+    if (pid == -1)
+    {
+        throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
+    }
+
+    if (pid == 0)
+    {
+        // Child
+        const auto child_status = this->sequential_list(*subshell.seq_list);
+        exit(child_status.exit_code);
+    }
+    else
+    {
+        // Parent
+        int wstatus{};
+        waitpid(pid, &wstatus, 0);
+
+        if (!WIFEXITED(wstatus))
+        {
+            throw std::runtime_error("Child did not return!");
+        }
+
+        retval.exit_code = WEXITSTATUS(wstatus);
+    }
+
+    return retval;
 }
 
 Executor::Executor(std::string_view input) : input(input) {}

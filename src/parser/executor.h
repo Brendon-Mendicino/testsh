@@ -22,6 +22,8 @@ class Executor
     ExecStats words(const Words &words);
     ExecStats op_list(const OpList &list);
     ExecStats sequential_list(const SequentialList &sequential_list);
+    ExecStats command(const Command &command);
+    ExecStats subshell(const Subshell &subshell);
 
 public:
     Executor(std::string_view input);

@@ -26,8 +26,10 @@ using Words = std::variant<Program, StatusNeg>;
 
 struct AndList;
 struct OrList;
+struct Subshell;
 
-using OpList = std::variant<AndList, OrList, Words>;
+using Command = std::variant<Words, Subshell>;
+using OpList = std::variant<AndList, OrList, Command>;
 
 struct AndList
 {
@@ -47,6 +49,11 @@ struct SequentialList
     std::unique_ptr<OpList> right;
 };
 
+struct Subshell
+{
+    std::unique_ptr<SequentialList> seq_list;
+};
+
 class SyntaxTree
 {
     template <typename VariantType, typename Fn>
@@ -60,6 +67,10 @@ public:
     std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
 
     std::optional<OpList> op_list(Tokenizer &tokenizer) const;
+
+    std::optional<Command> command(Tokenizer &tokenizer) const;
+
+    std::optional<Subshell> subshell(Tokenizer &tokenizer) const;
 
     std::optional<Words> words(Tokenizer &tokenizer) const;
 
@@ -119,6 +130,29 @@ struct std::formatter<StatusNeg> : debug_spec
                 ctx.out(),
                 "StatusNeg(program={:?})",
                 prog.prog);
+        }
+    }
+};
+
+template <>
+struct std::formatter<Subshell> : debug_spec
+{
+    auto format(const Subshell &subshell, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            const std::string sspaces(this->spaces, ' ');
+
+            std::format_to(ctx.out(), "Subshell(\n{}seq_list=", sspaces);
+            this->p_format(subshell.seq_list, ctx);
+            return std::format_to(ctx.out(), ")");
+        }
+        else
+        {
+            return std::format_to(
+                ctx.out(),
+                "Subshell(seq_list={:?})",
+                subshell.seq_list);
         }
     }
 };

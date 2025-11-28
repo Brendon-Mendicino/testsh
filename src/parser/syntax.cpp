@@ -1,6 +1,17 @@
 #include "syntax.h"
 #include <print>
 
+/**
+ * @brief Use this function if you want to check an optional variant.
+ * If the return value of the fucntion `fn` is `std::nullopt` then
+ * don't commint the advancements to the tokenizer.
+ * 
+ * @tparam VariantType 
+ * @tparam Fn 
+ * @param tokenizer 
+ * @param fn 
+ * @return std::optional<VariantType> 
+ */
 template <typename VariantType, typename Fn>
 inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn) const
 {
@@ -110,9 +121,9 @@ std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) 
  * BNF:
  *
  * ```
- * op_list ::= words
- *           | op_list AND_AND words
- *           | op_list OR_OR words
+ * op_list ::= command
+ *           | op_list AND_AND command
+ *           | op_list OR_OR command
  *           ;
  * ```
  *
@@ -121,13 +132,13 @@ std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) 
  */
 std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 {
-    auto words = this->words(tokenizer);
-    if (!words.has_value())
+    auto command = this->command(tokenizer);
+    if (!command.has_value())
     {
         return std::nullopt;
     }
 
-    OpList retval = std::move(*words);
+    OpList retval = std::move(*command);
 
     for (;;)
     {
@@ -148,9 +159,10 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
             break;
         }
 
-        // The next tokens must be a words
-        auto lhs_words = this->words(sub_tok);
-        if (!lhs_words.has_value())
+        // The next tokens must be a command
+        // TODO: do some error handling?
+        auto lhs_command = this->command(sub_tok);
+        if (!lhs_command.has_value())
         {
             break;
         }
@@ -159,7 +171,7 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
         {
             AndList and_and{
                 .left = std::make_unique<OpList>(std::move(retval)),
-                .right = std::make_unique<OpList>(std::move(*lhs_words)),
+                .right = std::make_unique<OpList>(std::move(*lhs_command)),
             };
 
             retval = std::move(and_and);
@@ -168,7 +180,7 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
         {
             OrList or_or{
                 .left = std::make_unique<OpList>(std::move(retval)),
-                .right = std::make_unique<OpList>(std::move(*lhs_words)),
+                .right = std::make_unique<OpList>(std::move(*lhs_command)),
             };
 
             retval = std::move(or_or);
@@ -183,6 +195,65 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
     }
 
     return retval;
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * command ::= words
+ *           | subshell
+ *           ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<Command> 
+ */
+std::optional<Command> SyntaxTree::command(Tokenizer &tokenizer) const
+{
+    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree::words))
+        return syn_words;
+
+    if (auto syn_subshell = this->check<Command>(tokenizer, &SyntaxTree::subshell))
+        return syn_subshell;
+
+    return std::nullopt;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * subshell ::= OPEN_ROUND complete_command CLOSE_ROUND
+ *            ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<Subshell>
+ */
+std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
+{
+    auto open_round = tokenizer.next_token();
+    if (!open_round.has_value())
+        return std::nullopt;
+
+    if (open_round->type != TokenType::open_round)
+        return std::nullopt;
+
+    auto complete_command = this->complete_command(tokenizer);
+    if (!complete_command.has_value())
+        return std::nullopt;
+
+    auto close_round = tokenizer.next_token();
+    if (!close_round.has_value())
+        return std::nullopt;
+
+    if (close_round->type != TokenType::close_round)
+        return std::nullopt;
+
+    return Subshell{
+        .seq_list = std::make_unique<SequentialList>(std::move(*complete_command)),
+    };
 }
 
 std::optional<Words> SyntaxTree::words(Tokenizer &tokenizer) const

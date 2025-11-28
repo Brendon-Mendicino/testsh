@@ -19,8 +19,8 @@ enum class TokenType
     and_and,
     or_or,
     bang,
-    open_paren,
-    close_paren,
+    open_round,
+    close_round,
     eof,
 };
 
@@ -77,10 +77,10 @@ constexpr std::string_view to_string(const TokenType token)
         return "or_or";
     case TokenType::bang:
         return "bang";
-    case TokenType::open_paren:
-        return "open_paren";
-    case TokenType::close_paren:
-        return "close_paren";
+    case TokenType::open_round:
+        return "open_round";
+    case TokenType::close_round:
+        return "close_round";
     case TokenType::eof:
         return "eof";
     }
