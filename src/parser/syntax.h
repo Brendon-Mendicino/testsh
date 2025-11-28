@@ -43,8 +43,8 @@ struct OrList
 
 struct SequentialList
 {
-    std::unique_ptr<OpList> left;
-    optional_ptr<OpList> right;
+    optional_ptr<SequentialList> left;
+    std::unique_ptr<OpList> right;
 };
 
 class SyntaxTree
@@ -53,11 +53,13 @@ class SyntaxTree
     inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
 
 public:
-    std::optional<OpList> build(Tokenizer &tokenizer);
+    std::optional<SequentialList> build(Tokenizer &tokenizer);
 
-    std::optional<OpList> op_list(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> complete_command(Tokenizer &tokenizer) const ;
 
     std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
+
+    std::optional<OpList> op_list(Tokenizer &tokenizer) const;
 
     std::optional<Words> words(Tokenizer &tokenizer) const;
 

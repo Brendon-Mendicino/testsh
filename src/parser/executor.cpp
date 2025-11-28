@@ -143,6 +143,17 @@ ExecStats Executor::op_list(const OpList &list)
     return stats;
 }
 
+ExecStats Executor::sequential_list(const SequentialList &sequential_list)
+{
+    if (sequential_list.left.has_value())
+    {
+        this->sequential_list(**sequential_list.left);
+    }
+
+    const auto stats = this->op_list(*sequential_list.right);
+    return stats;
+}
+
 Executor::Executor(std::string_view input) : input(input) {}
 
 // TODO: change retval
@@ -151,15 +162,17 @@ ExecStats Executor::execute()
     Tokenizer tokenizer{this->input};
     SyntaxTree tree;
 
-    const auto words = tree.build(tokenizer);
+    const auto program = tree.build(tokenizer);
 
-    if (!words.has_value())
+    if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    std::println("{:#?}", *words);
+    std::println("=== SYNTAX TREE ===");
+    std::println("{:#?}", *program);
+
     std::println("=== COMMAND BEGIN ===");
 
-    const auto retval = this->op_list(*words);
+    const auto retval = this->sequential_list(*program);
 
     return retval;
 }

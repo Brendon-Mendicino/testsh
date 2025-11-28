@@ -6,6 +6,10 @@ Run the project:
 bazel run :testsh
 ```
 
+Debug the project:
+
+Run the VSCode task: `Build Testsh (Debug)` from the file `./.vscode/tasks.json`, and then run the VSCode debugger.
+
 # Stages
 
 1. [ ] Stage 1: lists, and, or, subshell, cd

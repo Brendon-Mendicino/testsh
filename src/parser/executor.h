@@ -21,6 +21,7 @@ class Executor
     ExecStats or_list(const OrList &or_list);
     ExecStats words(const Words &words);
     ExecStats op_list(const OpList &list);
+    ExecStats sequential_list(const SequentialList &sequential_list);
 
 public:
     Executor(std::string_view input);

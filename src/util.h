@@ -157,6 +157,11 @@ struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
         // Reuse existing formatter for elements
         std::formatter<T, CharT> elem_fmt{*this};
 
+        if (!ptr)
+        {
+            return std::format_to(ctx.out(), "unique_ptr(null)");
+        }
+
         const T &elem = *ptr;
 
         std::format_to(ctx.out(), "unique_ptr(");
@@ -188,19 +193,13 @@ struct std::formatter<std::variant<Types...>> : debug_spec
 template <typename T, typename CharT>
 struct std::formatter<std::optional<T>, CharT> : debug_spec
 {
-    // Reuse existing formatter for elements
-    std::formatter<T, CharT> elem_fmt;
-
-    // parse optional format specifiers (forward to element formatter)
-    constexpr auto parse(std::basic_format_parse_context<CharT> &ctx)
-    {
-        return elem_fmt.parse(ctx);
-    }
-
     template <typename FormatContext>
     typename FormatContext::iterator
     format(const std::optional<T> &ptr, FormatContext &ctx) const
     {
+        // Reuse existing formatter for elements
+        std::formatter<T, CharT> elem_fmt{*this};
+
         if (ptr.has_value())
         {
             std::format_to(ctx.out(), "Some(");
