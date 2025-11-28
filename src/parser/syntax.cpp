@@ -282,14 +282,14 @@ std::optional<Program> SyntaxTree::program(Tokenizer &tokenizer) const
     if (!prog_token.has_value())
         return std::nullopt;
 
-    if (prog_token->type != TokenType::word)
+    if (prog_token->type != TokenType::word && prog_token->type != TokenType::number)
         return std::nullopt;
 
     std::vector<std::string_view> args{};
 
     while (const auto arg = tokenizer.peek())
     {
-        if (arg->type != TokenType::word)
+        if (arg->type != TokenType::word && arg->type != TokenType::number)
             break;
 
         args.emplace_back(arg->value);

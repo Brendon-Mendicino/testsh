@@ -63,6 +63,22 @@ std::optional<ExecStats> Executor::builtin(const Program &prog) const
         };
     }
 
+    else if (prog.program == "exec")
+    {
+        const int exit_code = builtin_exec(prog);
+        return ExecStats{
+            .exit_code = exit_code,
+        };
+    }
+
+    else if (prog.program == "exit")
+    {
+        const int exit_code = builtin_exit(prog);
+        return ExecStats{
+            .exit_code = exit_code,
+        };
+    }
+
     return std::nullopt;
 }
 

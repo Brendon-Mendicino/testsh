@@ -23,7 +23,7 @@ static const std::vector<Specification> specs{
 
     // word kinds
     {R"(^(\d+))", TokenType::number},
-    {R"(^([\w\-_\/.]+))", TokenType::word},
+    {R"(^([\w\-\/.]+))", TokenType::word},
 
     {R"(^("[^']"))", TokenType::string},
     {R"(^('[^']'))", TokenType::string},
