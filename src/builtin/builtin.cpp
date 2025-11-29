@@ -21,9 +21,9 @@ class ArgsToExec
     std::size_t args_size;
 
 public:
-    explicit ArgsToExec(const Program &prog)
+    explicit ArgsToExec(const SimpleCommand &cmd)
     {
-        const auto &args = prog.arguments;
+        const auto &args = cmd.arguments;
 
         // +1 from program
         // +1 from NULL terminator
@@ -34,7 +34,7 @@ public:
         this->str_owner.reserve(args.size() + 2);
 
         // Push program first
-        this->str_owner.emplace_back(prog.program);
+        this->str_owner.emplace_back(cmd.program);
         this->args_array[0] = this->str_owner[0].c_str();
 
         for (size_t i{}; i < args.size(); ++i)
@@ -92,7 +92,7 @@ int builtin_cd(const std::vector<std::string_view> &args)
     return 0;
 }
 
-int builtin_exec(const Program &exec)
+int builtin_exec(const SimpleCommand &exec)
 {
     assert(exec.program == "exec");
 
@@ -101,7 +101,9 @@ int builtin_exec(const Program &exec)
         return 0;
     }
 
-    const Program to_exec{
+    // Crate a support class, with the first arg moved to be the program name.
+    // This makes it easier to get args to pass the the execvp()
+    const SimpleCommand to_exec{
         .program = exec.arguments[0],
         .arguments = std::vector(exec.arguments.begin() + 1, exec.arguments.end()),
     };
@@ -115,7 +117,7 @@ int builtin_exec(const Program &exec)
     return retval;
 }
 
-int builtin_exit(const Program &exit)
+int builtin_exit(const SimpleCommand &exit)
 {
     assert(exit.program == "exit");
 

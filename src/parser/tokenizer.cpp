@@ -33,6 +33,10 @@ static const std::vector<Specification> specs{
 
     // Redirections
     {R"(^(\|))", TokenType::pipe},
+    {R"(^(>>))", TokenType::dgreat},
+    {R"(^(>))", TokenType::great},
+    {R"(^(<<))", TokenType::dless},
+    {R"(^(<))", TokenType::less},
 
     {R"(^(\z))", TokenType::eof},
 };

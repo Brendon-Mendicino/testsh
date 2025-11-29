@@ -9,8 +9,8 @@
 // TODO: modify
 int builtin_cd(const std::vector<std::string_view> &args);
 
-int builtin_exec(const Program &exec);
+int builtin_exec(const SimpleCommand &exec);
 
-int builtin_exit(const Program &exit);
+int builtin_exit(const SimpleCommand &exit);
 
 #endif // TESTSH_BUILTIN_H

@@ -21,9 +21,9 @@ class ArgsToExec
     std::size_t args_size;
 
 public:
-    explicit ArgsToExec(const Program &prog)
+    explicit ArgsToExec(const SimpleCommand &cmd)
     {
-        const auto &args = prog.arguments;
+        const auto &args = cmd.arguments;
 
         // +1 from program
         // +1 from NULL terminator
@@ -34,7 +34,7 @@ public:
         this->str_owner.reserve(args.size() + 2);
 
         // Push program first
-        this->str_owner.emplace_back(prog.program);
+        this->str_owner.emplace_back(cmd.program);
         this->args_array[0] = this->str_owner[0].c_str();
 
         for (size_t i{}; i < args.size(); ++i)
@@ -98,27 +98,27 @@ static std::optional<std::tuple<int, int>> create_pipe()
     return std::tuple{pipefd[0], pipefd[1]};
 }
 
-std::optional<ExecStats> Executor::builtin(const Program &prog) const
+std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const
 {
-    if (prog.program == "cd")
+    if (cmd.program == "cd")
     {
-        const int exit_code = builtin_cd(prog.arguments);
+        const int exit_code = builtin_cd(cmd.arguments);
         return ExecStats{
             .exit_code = exit_code,
         };
     }
 
-    else if (prog.program == "exec")
+    else if (cmd.program == "exec")
     {
-        const int exit_code = builtin_exec(prog);
+        const int exit_code = builtin_exec(cmd);
         return ExecStats{
             .exit_code = exit_code,
         };
     }
 
-    else if (prog.program == "exit")
+    else if (cmd.program == "exit")
     {
-        const int exit_code = builtin_exit(prog);
+        const int exit_code = builtin_exit(cmd);
         return ExecStats{
             .exit_code = exit_code,
         };
@@ -127,11 +127,11 @@ std::optional<ExecStats> Executor::builtin(const Program &prog) const
     return std::nullopt;
 }
 
-ExecStats Executor::execute_program(const Program &prog, const CommandState &state) const
+ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState &state) const
 {
     // Check if a builtin can be run first before, before running
     // the program through exec().
-    const auto builtin_run = this->builtin(prog);
+    const auto builtin_run = this->builtin(cmd);
     if (builtin_run)
         return *builtin_run;
 
@@ -150,7 +150,7 @@ ExecStats Executor::execute_program(const Program &prog, const CommandState &sta
         if (!apply_redirections(state))
             exit(1);
 
-        const ArgsToExec exec{prog};
+        const ArgsToExec exec{cmd};
         const auto args_to_pass = exec.args()->get();
 
         execvp(args_to_pass[0], (char *const *)args_to_pass);
@@ -185,16 +185,6 @@ ExecStats Executor::execute_program(const Program &prog, const CommandState &sta
     };
 }
 
-// TODO: move to builtin
-ExecStats Executor::negate(const Program &prog, const CommandState &state) const
-{
-    auto stats = this->execute_program(prog, state);
-
-    stats.exit_code = (stats.exit_code == 0) ? 1 : 0;
-
-    return stats;
-}
-
 ExecStats Executor::and_list(const AndList &and_list) const
 {
     const auto lhs = this->op_list(*and_list.left);
@@ -223,20 +213,6 @@ ExecStats Executor::or_list(const OrList &or_list) const
     const auto rhs = this->op_list(*or_list.right);
 
     return rhs;
-}
-
-ExecStats Executor::words(const Words &words, const CommandState &state) const
-{
-    const auto stats = std::visit(
-        overloads{
-            [&](const Program &program)
-            { return this->execute_program(program, state); },
-            [&](const StatusNeg &status_neg)
-            { return this->negate(status_neg.prog, state); },
-        },
-        words);
-
-    return stats;
 }
 
 ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state) const
@@ -295,8 +271,8 @@ ExecStats Executor::command(const Command &command, const CommandState &state) c
 {
     const auto stats = std::visit(
         overloads{
-            [&](const Words &words)
-            { return this->words(words, state); },
+            [&](const SimpleCommand &cmd)
+            { return this->simple_command(cmd, state); },
             [&](const Subshell &subshell)
             { return this->subshell(subshell, state); },
         },
@@ -355,6 +331,21 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
         .child_pid = pid,
     };
 }
+
+ExecStats Executor::program(const ThisProgram &program) const
+{
+    if (!program.child.has_value())
+        return {};
+
+    ExecStats retval{};
+    for (const auto &complete_command : **program.child)
+    {
+        retval = this->sequential_list(complete_command);
+    }
+
+    return retval;
+}
+
 
 bool Executor::line_has_continuation() const
 {
@@ -442,7 +433,7 @@ ExecStats Executor::execute() const
 
     std::println("=== COMMAND BEGIN ===");
 
-    const auto retval = this->sequential_list(*program);
+    const auto retval = this->program(*program);
 
     return retval;
 }

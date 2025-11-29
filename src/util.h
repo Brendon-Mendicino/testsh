@@ -146,6 +146,38 @@ struct std::formatter<std::vector<T>, CharT>
     }
 };
 
+// template <typename T, typename CharT>
+// struct std::formatter<std::vector<T>, CharT> : debug_spec 
+// {
+//     template <typename FormatContext>
+//     typename FormatContext::iterator
+//     format(const std::vector<T> &vec, FormatContext &ctx) const
+//     {
+//         // Reuse existing formatter for elements
+//         std::formatter<T, CharT> elem_fmt{*this};
+//         const std::string sspaces(this->spaces, ' ');
+
+//         auto out = ctx.out();
+//         *out++ = '[';
+
+//         for (size_t i = 0; i < vec.size(); ++i)
+//         {
+//             if (this->pretty)
+//                 out = std::format_to(ctx.out(), "\n{}", sspaces);
+
+//             out = elem_fmt.format(vec[i], ctx);
+//             if (i + 1 < vec.size())
+//             {
+//                 *out++ = ',';
+//                 *out++ = ' ';
+//             }
+//         }
+
+//         *out++ = ']';
+//         return out;
+//     }
+// };
+
 template <typename T, typename CharT>
 struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
 {

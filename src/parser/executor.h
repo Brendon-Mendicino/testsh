@@ -32,17 +32,16 @@ class Executor
     std::vector<std::string> input_buffer;
     TerminalState terminal_state;
 
-    std::optional<ExecStats> builtin(const Program &prog) const;
-    ExecStats execute_program(const Program &prog, const CommandState &state) const;
-    ExecStats negate(const Program &prog, const CommandState &state) const;
+    std::optional<ExecStats> builtin(const SimpleCommand &cmd) const;
+    ExecStats simple_command(const SimpleCommand &cmd, const CommandState &state) const;
     ExecStats and_list(const AndList &and_list) const;
     ExecStats or_list(const OrList &or_list) const;
-    ExecStats words(const Words &words, const CommandState &state) const;
     ExecStats pipeline(const Pipeline &pipeline, const CommandState &state) const;
     ExecStats op_list(const OpList &list) const;
     ExecStats sequential_list(const SequentialList &sequential_list) const;
     ExecStats command(const Command &command, const CommandState &state) const;
     ExecStats subshell(const Subshell &subshell, const CommandState &state) const;
+    ExecStats program(const ThisProgram &program) const;
 
     bool line_has_continuation() const;
     bool read_stdin();

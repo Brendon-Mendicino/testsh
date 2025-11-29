@@ -21,6 +21,14 @@ enum class TokenType
     or_or,
     bang,
     pipe,
+    less,
+    great,
+    dless,
+    dgreat,
+    lessand,
+    greatand,
+    lessgreat,
+    dlessdash,
     open_round,
     close_round,
     line_continuation,
@@ -104,6 +112,22 @@ constexpr std::string_view to_string(const TokenType token)
         return "bang";
     case TokenType::pipe:
         return "pipe";
+    case TokenType::less:
+        return "less";
+    case TokenType::great:
+        return "great";
+    case TokenType::dless:
+        return "dless";
+    case TokenType::dgreat:
+        return "dgreat";
+    case TokenType::lessand:
+        return "lessand";
+    case TokenType::greatand:
+        return "greatand";
+    case TokenType::lessgreat:
+        return "lessgreat";
+    case TokenType::dlessdash:
+        return "dlessdash";
     case TokenType::open_round:
         return "open_round";
     case TokenType::close_round:

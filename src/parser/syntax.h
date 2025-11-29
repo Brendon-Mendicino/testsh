@@ -11,25 +11,40 @@
 #include <utility>
 #include "../util.h"
 
-struct Program
+enum class OpenKind
+{
+    read,
+    replace,
+    append,
+    rw,
+};
+
+struct FileRedirect
+{
+    int redirect_fd;
+    OpenKind file_kind;
+    std::string_view filename;
+};
+
+struct FdRedirect
+{
+};
+
+using Redirect = std::variant<FileRedirect/*, FdRedirect*/>;
+
+struct SimpleCommand
 {
     std::string_view program;
     std::vector<std::string_view> arguments;
+    std::vector<Redirect> redirections;
 };
-
-struct StatusNeg
-{
-    Program prog;
-};
-
-using Words = std::variant<Program, StatusNeg>;
 
 struct AndList;
 struct OrList;
 struct Subshell;
 struct Pipeline;
 
-using Command = std::variant<Words, Subshell>;
+using Command = std::variant<SimpleCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
 
 struct AndList
@@ -61,17 +76,35 @@ struct Subshell
     std::unique_ptr<SequentialList> seq_list;
 };
 
+using CompleteCommands = std::vector<SequentialList>;
+
+struct ThisProgram
+{
+    optional_ptr<CompleteCommands> child;
+};
+
+// ---------------------------
+// SyntaxTree
+// ---------------------------
+
+/**
+ * @brief You can read the full bash syntax BNF at
+ * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_10
+ *
+ */
 class SyntaxTree
 {
     template <typename VariantType, typename Fn>
     inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
 
 public:
-    std::optional<SequentialList> build(Tokenizer &tokenizer);
+    std::optional<ThisProgram> build(Tokenizer &tokenizer);
+
+    std::optional<CompleteCommands> complete_commands(Tokenizer &tokenizer) const;
 
     std::optional<SequentialList> complete_command(Tokenizer &tokenizer) const;
 
-    std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> list(Tokenizer &tokenizer) const;
 
     std::optional<OpList> op_list(Tokenizer &tokenizer) const;
 
@@ -79,23 +112,48 @@ public:
 
     std::optional<Command> command(Tokenizer &tokenizer) const;
 
+    // std::optional<CompoundCommand> compound_command(Tokenizer &tokenizer) const;
+
     std::optional<Subshell> subshell(Tokenizer &tokenizer) const;
 
-    std::optional<Words> words(Tokenizer &tokenizer) const;
+    std::optional<SimpleCommand> simple_command(Tokenizer &tokenizer) const;
 
-    std::optional<Program> program(Tokenizer &tokenizer) const;
+    // std::optional<std::vector<Redirect>> redirect_list(Tokenizer &tokenizer) const;
 
-    std::optional<StatusNeg> status_neg(Tokenizer &tokenzier) const;
+    std::optional<Redirect> io_redirect(Tokenizer &tokenizer) const;
+
+    std::optional<Redirect> io_file(Tokenizer &tokenizer) const;
+
+    std::optional<Redirect> io_here(Tokenizer &tokenizer) const;
+
+    std::optional<std::string_view> filename(Tokenizer &tokenizer) const;
+
+    std::optional<std::string_view> word(Tokenizer &tokenizer) const;
 };
 
 // ----------------
 // FOMATTING
 // ----------------
 
-template <>
-struct std::formatter<Program> : debug_spec
+constexpr std::string_view to_string(const OpenKind kind)
 {
-    auto format(const Program &prog, auto &ctx) const
+    switch (kind)
+    {
+    case OpenKind::read:
+        return "read";
+    case OpenKind::replace:
+        return "replace";
+    case OpenKind::append:
+        return "append";
+    case OpenKind::rw:
+        return "rw";
+    }
+}
+
+template <>
+struct std::formatter<FileRedirect> : debug_spec
+{
+    auto format(const FileRedirect &red, auto &ctx) const
     {
         if (this->pretty)
         {
@@ -103,42 +161,53 @@ struct std::formatter<Program> : debug_spec
 
             return std::format_to(
                 ctx.out(),
-                "Program(\n{}program={},\n{}arguments={})",
+                "FileRedirect(\n{}redirect_fd={},\n{}file_kind={},\n{}filaname={})",
                 sspaces,
-                prog.program,
+                red.redirect_fd,
                 sspaces,
-                prog.arguments);
+                to_string(red.file_kind),
+                sspaces,
+                red.filename);
         }
         else
         {
             return std::format_to(
                 ctx.out(),
-                "Program(program={}, arguments={})",
-                prog.program,
-                prog.arguments);
+                "FileRedirect(redirect_fd={}, file_kind={}, filaname={})",
+                red.redirect_fd,
+                to_string(red.file_kind),
+                red.filename);
         }
     }
 };
 
 template <>
-struct std::formatter<StatusNeg> : debug_spec
+struct std::formatter<SimpleCommand> : debug_spec
 {
-    auto format(const StatusNeg &prog, auto &ctx) const
+    auto format(const SimpleCommand &prog, auto &ctx) const
     {
         if (this->pretty)
         {
             const std::string sspaces(this->spaces, ' ');
 
-            std::format_to(ctx.out(), "StatusNeg(\n{}program=", sspaces);
-            this->p_format(prog.prog, ctx);
-            return std::format_to(ctx.out(), ")");
+            return std::format_to(
+                ctx.out(),
+                "SimpleCommand(\n{}program={},\n{}arguments={},\n{}redirections={:#?})",
+                sspaces,
+                prog.program,
+                sspaces,
+                prog.arguments,
+                sspaces,
+                prog.redirections);
         }
         else
         {
             return std::format_to(
                 ctx.out(),
-                "StatusNeg(program={:?})",
-                prog.prog);
+                "SimpleCommand(program={}, arguments={}, redirections={:?})",
+                prog.program,
+                prog.arguments,
+                prog.redirections);
         }
     }
 };
@@ -162,6 +231,35 @@ struct std::formatter<Subshell> : debug_spec
                 ctx.out(),
                 "Subshell(seq_list={:?})",
                 subshell.seq_list);
+        }
+    }
+};
+
+template <typename T>
+concept HasChild = requires(T t) {
+    t.child;
+};
+
+template <HasChild T>
+struct std::formatter<T> : debug_spec
+{
+    auto format(const T &node, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            const std::string sspaces(this->spaces, ' ');
+
+            std::format_to(ctx.out(), "{}(\n{}child=", typeid_name<T>(), sspaces);
+            this->p_format(node.child, ctx);
+            return std::format_to(ctx.out(), ")");
+        }
+        else
+        {
+            return std::format_to(
+                ctx.out(),
+                "{}(child={:?})",
+                typeid_name<T>(),
+                node.child);
         }
     }
 };

@@ -5,12 +5,12 @@
  * @brief Use this function if you want to check an optional variant.
  * If the return value of the fucntion `fn` is `std::nullopt` then
  * don't commint the advancements to the tokenizer.
- * 
- * @tparam VariantType 
- * @tparam Fn 
- * @param tokenizer 
- * @param fn 
- * @return std::optional<VariantType> 
+ *
+ * @tparam VariantType
+ * @tparam Fn
+ * @param tokenizer
+ * @param fn
+ * @return std::optional<VariantType>
  */
 template <typename VariantType, typename Fn>
 inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn) const
@@ -26,17 +26,62 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
     return std::nullopt;
 }
 
-std::optional<SequentialList> SyntaxTree::build(Tokenizer &tokenizer)
+/**
+ * BNF:
+ *
+ * ```
+ * program ::= linebreak
+ *           | linebreak complete_commands linebreak
+ *           ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<ThisProgram>
+ */
+std::optional<ThisProgram> SyntaxTree::build(Tokenizer &tokenizer)
 {
-    return this->complete_command(tokenizer);
+    if (tokenizer.next_is_eof())
+        return {};
+
+    auto complete_commands = this->complete_commands(tokenizer);
+    if (!complete_commands.has_value())
+        return std::nullopt;
+
+    return ThisProgram{
+        .child = std::make_unique<CompleteCommands>(std::move(*complete_commands)),
+    };
 }
 
 /**
  * BNF:
  *
  * ```
- * complete_command ::= sequential_list
- *                    | sequential_list SEMI
+ * complete_commands ::= complete_command
+ *                     | complete_commands newline_list complete_command
+ *                     ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<CompleteCommands>
+ */
+std::optional<CompleteCommands> SyntaxTree::complete_commands(Tokenizer &tokenizer) const
+{
+    CompleteCommands complete_commands;
+
+    while (auto complete_command = this->complete_command(tokenizer))
+    {
+        complete_commands.emplace_back(std::move(*complete_command));
+    }
+
+    return complete_commands;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * complete_command ::= list
+ *                    | list SEMI
  *                    ;
  * ```
  *
@@ -45,8 +90,8 @@ std::optional<SequentialList> SyntaxTree::build(Tokenizer &tokenizer)
  */
 std::optional<SequentialList> SyntaxTree::complete_command(Tokenizer &tokenizer) const
 {
-    auto seq_list = this->sequential_list(tokenizer);
-    if (!seq_list.has_value())
+    auto list = this->list(tokenizer);
+    if (!list.has_value())
         return std::nullopt;
 
     const auto semi = tokenizer.peek();
@@ -56,22 +101,22 @@ std::optional<SequentialList> SyntaxTree::complete_command(Tokenizer &tokenizer)
         tokenizer.next_token();
     }
 
-    return seq_list;
+    return list;
 }
 
 /**
  * BNF:
  *
  * ```
- * sequential_list ::= op_list
- *                   | sequential_list SEMI op_list
- *                   ;
+ * list ::= op_list
+ *        | list SEMI op_list
+ *        ;
  * ```
  *
  * @param tokenizer
  * @return std::optional<SequentialList>
  */
-std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) const
+std::optional<SequentialList> SyntaxTree::list(Tokenizer &tokenizer) const
 {
     SequentialList retval{};
 
@@ -199,15 +244,15 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
  * pipeline ::= command
  *            | pipeline PIPE command
  *            ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<Pipeline> 
+ *
+ * @param tokenizer
+ * @return std::optional<Pipeline>
  */
 std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
 {
@@ -258,19 +303,19 @@ std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
- * command ::= words
+ * command ::= simple_command
  *           | subshell
  *           ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<Command> 
+ *
+ * @param tokenizer
+ * @return std::optional<Command>
  */
 std::optional<Command> SyntaxTree::command(Tokenizer &tokenizer) const
 {
-    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree::words))
+    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree::simple_command))
         return syn_words;
 
     if (auto syn_subshell = this->check<Command>(tokenizer, &SyntaxTree::subshell))
@@ -315,64 +360,211 @@ std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
     };
 }
 
-std::optional<Words> SyntaxTree::words(Tokenizer &tokenizer) const
+/**
+ * BNF:
+ *
+ * ```
+ * simple_command ::= cmd_prefix cmd_word cmd_suffix
+ *                  | cmd_prefix cmd_word
+ *                  | cmd_prefix
+ *                  | cmd_name cmd_suffix
+ *                  | cmd_name
+ *                  ;
+ * cmd_name       ::= WORD                       Apply rule 7a
+ *                  ;
+ * cmd_word       ::= WORD                       Apply rule 7b
+ *                  ;
+ * cmd_prefix     ::=            io_redirect
+ *                  | cmd_prefix io_redirect
+ *                  |            ASSIGNMENT_WORD
+ *                  | cmd_prefix ASSIGNMENT_WORD
+ *                  ;
+ * cmd_suffix     ::=            io_redirect
+ *                  | cmd_suffix io_redirect
+ *                  |            WORD
+ *                  | cmd_suffix WORD
+ *                  ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<SimpleCommand>
+ */
+std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) const
 {
-    Tokenizer sub_tok{tokenizer};
-    if (auto prog_neg = this->status_neg(sub_tok))
-    {
-        tokenizer = sub_tok;
-        return *prog_neg;
-    }
-
-    sub_tok = Tokenizer{tokenizer};
-    if (const auto prog = this->program(sub_tok))
-    {
-        tokenizer = sub_tok;
-        return *prog;
-    }
-
-    return std::nullopt;
-}
-
-std::optional<Program> SyntaxTree::program(Tokenizer &tokenizer) const
-{
-    const auto prog_token{tokenizer.next_token()};
-
-    if (!prog_token.has_value())
-        return std::nullopt;
-
-    if (prog_token->type != TokenType::word && prog_token->type != TokenType::number)
+    const auto cmd_word = this->word(tokenizer);
+    if (!cmd_word)
         return std::nullopt;
 
     std::vector<std::string_view> args{};
+    std::vector<Redirect> redirects{};
 
-    while (const auto arg = tokenizer.peek())
+    while (!tokenizer.next_is_eof())
     {
-        if (arg->type != TokenType::word && arg->type != TokenType::number)
-            break;
+        Tokenizer word_tok{tokenizer};
+        const auto arg = this->word(word_tok);
+        if (arg)
+        {
+            tokenizer = word_tok;
+            args.emplace_back(*arg);
+            continue;
+        }
 
-        args.emplace_back(arg->value);
+        Tokenizer redirect_tok{tokenizer};
+        auto redirect = this->io_redirect(redirect_tok);
+        if (redirect)
+        {
+            tokenizer = redirect_tok;
+            redirects.emplace_back(std::move(*redirect));
+            continue;
+        }
 
-        tokenizer.next_token();
+        break;
     }
 
-    return Program{prog_token->value, std::move(args)};
+    return SimpleCommand{
+        .program = *cmd_word,
+        .arguments = std::move(args),
+        .redirections = std::move(redirects),
+    };
 }
 
-std::optional<StatusNeg> SyntaxTree::status_neg(Tokenizer &tokenzier) const
+/**
+ * BNF:
+ *
+ * ```
+ * io_redirect ::=           io_file
+ *               | IO_NUMBER io_file
+ *               |           io_here
+ *               | IO_NUMBER io_here
+ *               ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<Redirect>
+ */
+std::optional<Redirect> SyntaxTree::io_redirect(Tokenizer &tokenizer) const
 {
-    const auto maybe_bang{tokenzier.next_token()};
+    std::optional<int> new_redirect_fd;
 
-    if (!maybe_bang.has_value())
+    const auto number_token = tokenizer.peek();
+    if (!number_token.has_value())
         return std::nullopt;
 
-    if (maybe_bang->type != TokenType::bang)
+    if (number_token->type == TokenType::number)
+    {
+        const auto tmp_num = std::string(number_token->value);
+        new_redirect_fd = std::atoi(tmp_num.c_str());
+    }
+
+    auto redirect = this->io_file(tokenizer);
+
+    // Replace fd
+    if (new_redirect_fd.has_value() && redirect.has_value())
+    {
+        std::visit(
+            overloads{
+                [&](FileRedirect &file)
+                { file.redirect_fd = *new_redirect_fd; },
+                [&](FdRedirect &fd) {},
+            },
+            *redirect);
+    }
+
+    return redirect;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * io_file ::= '<'       filename
+ *           | LESSAND   filename
+ *           | '>'       filename
+ *           | GREATAND  filename
+ *           | DGREAT    filename
+ *           | LESSGREAT filename
+ *           | CLOBBER   filename
+ *           ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<Redirect>
+ */
+std::optional<Redirect> SyntaxTree::io_file(Tokenizer &tokenizer) const
+{
+    const auto redirect_token = tokenizer.next_token();
+    if (!redirect_token.has_value())
         return std::nullopt;
 
-    const auto maybe_prog{this->program(tokenzier)};
-
-    if (!maybe_prog.has_value())
+    // TODO: error handling
+    auto filename = this->filename(tokenizer);
+    if (!filename.has_value())
         return std::nullopt;
 
-    return StatusNeg{std::move(*maybe_prog)};
+    Redirect redirect;
+
+    switch (redirect_token->type)
+    {
+    case TokenType::less:
+        redirect = FileRedirect{.redirect_fd = STDIN_FILENO, .file_kind = OpenKind::read, .filename = std::move(*filename)};
+        break;
+
+    case TokenType::great:
+        redirect = FileRedirect{.redirect_fd = STDOUT_FILENO, .file_kind = OpenKind::replace, .filename = std::move(*filename)};
+        break;
+
+    case TokenType::dgreat:
+        redirect = FileRedirect{.redirect_fd = STDOUT_FILENO, .file_kind = OpenKind::append, .filename = std::move(*filename)};
+        break;
+
+    case TokenType::lessgreat:
+        redirect = FileRedirect{.redirect_fd = STDIN_FILENO, .file_kind = OpenKind::rw, .filename = std::move(*filename)};
+        break;
+
+    default:
+        return std::nullopt;
+    }
+
+    return redirect;
+}
+
+std::optional<Redirect> SyntaxTree::io_here(Tokenizer &tokenizer) const
+{
+    throw std::runtime_error("Not implemented");
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * filename ::= WORD
+ *            ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<std::string>
+ */
+std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
+{
+    const auto word = tokenizer.next_token();
+    if (!word.has_value())
+        return std::nullopt;
+
+    const auto type = word->type;
+    if (type != TokenType::word && type != TokenType::number)
+        return std::nullopt;
+
+    return word->value;
+}
+
+std::optional<std::string_view> SyntaxTree::word(Tokenizer &tokenizer) const
+{
+    const auto word = tokenizer.next_token();
+    if (!word.has_value())
+        return std::nullopt;
+
+    if (word->type != TokenType::word && word->type != TokenType::number)
+        return std::nullopt;
+
+    return word->value;
 }
