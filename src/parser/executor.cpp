@@ -53,6 +53,51 @@ public:
     }
 };
 
+// TODO: Move this class with RAII
+static bool apply_redirections(const CommandState &state)
+{
+    // close fds: leftover from the pipe() calls
+    for (const auto to_close : state.fd_to_close)
+    {
+        close(to_close);
+    }
+
+    // Duplicate fds
+    for (const auto [to_replace, replacer] : state.redirects)
+    {
+        const int retval = dup2(replacer, to_replace);
+        if (retval == -1)
+        {
+            std::println(stderr, "dup2: {}", std::strerror(errno));
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void close_redirections(const CommandState &state)
+{
+    for (const auto [_, replacer] : state.redirects)
+    {
+        close(replacer);
+    }
+}
+
+static std::optional<std::tuple<int, int>> create_pipe()
+{
+    int pipefd[2] = {-1, -1};
+    const int retval = pipe(pipefd);
+
+    if (retval == -1)
+    {
+        std::println(stderr, "error: pipe: {}", std::strerror(errno));
+        return std::nullopt;
+    }
+
+    return std::tuple{pipefd[0], pipefd[1]};
+}
+
 std::optional<ExecStats> Executor::builtin(const Program &prog) const
 {
     if (prog.program == "cd")
@@ -82,7 +127,7 @@ std::optional<ExecStats> Executor::builtin(const Program &prog) const
     return std::nullopt;
 }
 
-ExecStats Executor::execute_program(const Program &prog) const
+ExecStats Executor::execute_program(const Program &prog, const CommandState &state) const
 {
     // Check if a builtin can be run first before, before running
     // the program through exec().
@@ -98,7 +143,13 @@ ExecStats Executor::execute_program(const Program &prog) const
 
     if (pid == 0)
     {
+        // -----------
         // Child
+        // -----------
+
+        if (!apply_redirections(state))
+            exit(1);
+
         const ArgsToExec exec{prog};
         const auto args_to_pass = exec.args()->get();
 
@@ -106,7 +157,23 @@ ExecStats Executor::execute_program(const Program &prog) const
         exit(1);
     }
 
+
+    // -----------
     // Parent
+    // -----------
+
+    // Close the redirections used by the child, the parent no longer needs
+    // them
+    close_redirections(state);
+
+    if (state.inside_pipeline)
+    {
+        // TODO: mofiy this logic
+        // Don't wait for the child
+        return { .child_pid = pid };
+    }
+
+
     int child_status;
     pid_t child_wait = waitpid(pid, &child_status, 0);
     if (child_wait != pid)
@@ -114,13 +181,14 @@ ExecStats Executor::execute_program(const Program &prog) const
 
     return ExecStats{
         .exit_code = WEXITSTATUS(child_status),
+        .child_pid = pid,
     };
 }
 
 // TODO: move to builtin
-ExecStats Executor::negate(const Program &prog) const
+ExecStats Executor::negate(const Program &prog, const CommandState &state) const
 {
-    auto stats = this->execute_program(prog);
+    auto stats = this->execute_program(prog, state);
 
     stats.exit_code = (stats.exit_code == 0) ? 1 : 0;
 
@@ -157,23 +225,43 @@ ExecStats Executor::or_list(const OrList &or_list) const
     return rhs;
 }
 
-ExecStats Executor::words(const Words &words) const
+ExecStats Executor::words(const Words &words, const CommandState &state) const
 {
     const auto stats = std::visit(
         overloads{
             [&](const Program &program)
-            { return this->execute_program(program); },
+            { return this->execute_program(program, state); },
             [&](const StatusNeg &status_neg)
-            { return this->negate(status_neg.prog); },
+            { return this->negate(status_neg.prog, state); },
         },
         words);
 
     return stats;
 }
 
-ExecStats Executor::pipeline(const Pipeline &pipeline) const
+ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state) const
 {
-    return {};
+    CommandState left_state{state};
+
+    if (pipeline.left.has_value())
+    {
+        auto pipefd = create_pipe();
+        if (!pipefd.has_value())
+        {
+            return {.exit_code = 1};
+        }
+
+        const auto [reader_fd, writer_fd] = *pipefd;
+
+        left_state.redirects.emplace_back(STDIN_FILENO, reader_fd);
+        left_state.fd_to_close.emplace_back(writer_fd);
+
+        this->pipeline(**pipeline.left, {.inside_pipeline = true, .redirects = {{STDOUT_FILENO, writer_fd}}, .fd_to_close = {reader_fd}});
+    }
+
+    const auto retval = this->command(*pipeline.right, left_state);
+
+    return retval;
 }
 
 ExecStats Executor::op_list(const OpList &list) const
@@ -185,7 +273,7 @@ ExecStats Executor::op_list(const OpList &list) const
             [&](const OrList &or_list)
             { return this->or_list(or_list); },
             [&](const Pipeline &pipeline)
-            { return this->pipeline(pipeline); },
+            { return this->pipeline(pipeline, {}); },
         },
         list);
 
@@ -203,24 +291,22 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list) const
     return stats;
 }
 
-ExecStats Executor::command(const Command &command) const
+ExecStats Executor::command(const Command &command, const CommandState &state) const
 {
     const auto stats = std::visit(
         overloads{
             [&](const Words &words)
-            { return this->words(words); },
+            { return this->words(words, state); },
             [&](const Subshell &subshell)
-            { return this->subshell(subshell); },
+            { return this->subshell(subshell, state); },
         },
         command);
 
     return stats;
 }
 
-ExecStats Executor::subshell(const Subshell &subshell) const
+ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state) const
 {
-    ExecStats retval{};
-
     // TODO: move forking in it's own function
     pid_t pid = fork();
     if (pid == -1)
@@ -230,12 +316,32 @@ ExecStats Executor::subshell(const Subshell &subshell) const
 
     if (pid == 0)
     {
+        // -----------
         // Child
+        // -----------
+
+        if (!apply_redirections(state))
+            exit(1);
+
         const auto child_status = this->sequential_list(*subshell.seq_list);
         exit(child_status.exit_code);
     }
 
+    // -----------
     // Parent
+    // -----------
+
+    // Close the redirections used by the child, the parent no longer needs
+    // them
+    close_redirections(state);
+
+    if (state.inside_pipeline)
+    {
+        // TODO: mofiy this logic
+        // Don't wait for the child
+        return { .child_pid = pid };
+    }
+
     int wstatus{};
     waitpid(pid, &wstatus, 0);
 
@@ -244,9 +350,10 @@ ExecStats Executor::subshell(const Subshell &subshell) const
         throw std::runtime_error("Child did not return!");
     }
 
-    retval.exit_code = WEXITSTATUS(wstatus);
-
-    return retval;
+    return {
+        .exit_code = WEXITSTATUS(wstatus),
+        .child_pid = pid,
+    };
 }
 
 bool Executor::line_has_continuation() const
