@@ -273,15 +273,25 @@ bool Executor::line_has_continuation() const
     return prev == TokenType::line_continuation || prev == TokenType::and_and || prev == TokenType::or_or;
 }
 
-void Executor::read_stdin()
+bool Executor::read_stdin()
 {
     std::string new_line;
     std::getline(std::cin, new_line);
 
+    if (!std::cin)
+    {
+        // TODO: check if we are actually at eof
+        // if (std::cin.eof())
+
+        return false;
+    }
+
     this->input_buffer.emplace_back(std::move(new_line));
+
+    return true;
 }
 
-void Executor::execute() const
+ExecStats Executor::execute() const
 {
     // Create a support buffer where the line_continuations are cut
     // and the subsequent lines are pasted togheter
@@ -306,6 +316,10 @@ void Executor::execute() const
     Tokenizer tokenizer{support};
     SyntaxTree tree;
 
+    // TODO: modify this
+    if (tokenizer.next_is_eof())
+        return {};
+
     const auto program = tree.build(tokenizer);
 
     if (!program.has_value())
@@ -317,19 +331,28 @@ void Executor::execute() const
     // std::println("=== COMMAND BEGIN ===");
 
     const auto retval = this->sequential_list(*program);
+
+    return retval;
 }
 
 TerminalState Executor::update()
 {
-    this->read_stdin();
+    if (!this->read_stdin())
+    {
+        return TerminalState{
+            .terminate_session = true,
+        };
+    }
 
     if (this->line_has_continuation())
     {
         return {.needs_more = true};
     }
 
-    this->execute();
+    const auto exec_stats = this->execute();
     this->input_buffer.clear();
 
-    return {};
+    return {
+        .exit_code = exec_stats.exit_code,
+    };
 }

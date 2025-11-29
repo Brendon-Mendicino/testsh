@@ -10,6 +10,7 @@ struct TerminalState
 {
     bool terminate_session;
     bool needs_more;
+    int exit_code;
 };
 
 struct ExecStats
@@ -34,8 +35,8 @@ class Executor
     ExecStats subshell(const Subshell &subshell) const;
 
     bool line_has_continuation() const;
-    void read_stdin();
-    void execute() const;
+    bool read_stdin();
+    ExecStats execute() const;
 
 public:
     TerminalState update();
