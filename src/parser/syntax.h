@@ -190,15 +190,16 @@ struct std::formatter<SimpleCommand> : debug_spec
         {
             const std::string sspaces(this->spaces, ' ');
 
-            return std::format_to(
+            std::format_to(
                 ctx.out(),
-                "SimpleCommand(\n{}program={},\n{}arguments={},\n{}redirections={:#?})",
+                "SimpleCommand(\n{}program={},\n{}arguments={},\n{}redirections=",
                 sspaces,
                 prog.program,
                 sspaces,
                 prog.arguments,
-                sspaces,
-                prog.redirections);
+                sspaces);
+            this->p_format(prog.redirections, ctx);
+            return std::format_to(ctx.out(), ")");
         }
         else
         {
