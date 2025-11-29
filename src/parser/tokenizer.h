@@ -20,6 +20,7 @@ enum class TokenType
     and_and,
     or_or,
     bang,
+    pipe,
     open_round,
     close_round,
     line_continuation,
@@ -101,6 +102,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "or_or";
     case TokenType::bang:
         return "bang";
+    case TokenType::pipe:
+        return "pipe";
     case TokenType::open_round:
         return "open_round";
     case TokenType::close_round:

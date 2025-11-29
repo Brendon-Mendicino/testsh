@@ -25,10 +25,14 @@ static const std::vector<Specification> specs{
     {R"(^(\d+))", TokenType::number},
     {R"(^([\w\-\/.]+))", TokenType::word},
 
+    // Strings
     {R"(^("[^']"))", TokenType::string},
     {R"(^('[^']'))", TokenType::string},
 
     {R"(^(!))", TokenType::bang},
+
+    // Redirections
+    {R"(^(\|))", TokenType::pipe},
 
     {R"(^(\z))", TokenType::eof},
 };

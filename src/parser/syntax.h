@@ -27,9 +27,10 @@ using Words = std::variant<Program, StatusNeg>;
 struct AndList;
 struct OrList;
 struct Subshell;
+struct Pipeline;
 
 using Command = std::variant<Words, Subshell>;
-using OpList = std::variant<AndList, OrList, Command>;
+using OpList = std::variant<AndList, OrList, Pipeline>;
 
 struct AndList
 {
@@ -49,6 +50,12 @@ struct SequentialList
     std::unique_ptr<OpList> right;
 };
 
+struct Pipeline
+{
+    optional_ptr<Pipeline> left;
+    std::unique_ptr<Command> right;
+};
+
 struct Subshell
 {
     std::unique_ptr<SequentialList> seq_list;
@@ -62,11 +69,13 @@ class SyntaxTree
 public:
     std::optional<SequentialList> build(Tokenizer &tokenizer);
 
-    std::optional<SequentialList> complete_command(Tokenizer &tokenizer) const ;
+    std::optional<SequentialList> complete_command(Tokenizer &tokenizer) const;
 
     std::optional<SequentialList> sequential_list(Tokenizer &tokenizer) const;
 
     std::optional<OpList> op_list(Tokenizer &tokenizer) const;
+
+    std::optional<Pipeline> pipeline(Tokenizer &tokenizer) const;
 
     std::optional<Command> command(Tokenizer &tokenizer) const;
 

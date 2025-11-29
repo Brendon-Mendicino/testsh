@@ -121,9 +121,9 @@ std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) 
  * BNF:
  *
  * ```
- * op_list ::= command
- *           | op_list AND_AND command
- *           | op_list OR_OR command
+ * op_list ::= pipeline
+ *           | op_list AND_AND pipeline
+ *           | op_list OR_OR pipeline
  *           ;
  * ```
  *
@@ -132,13 +132,13 @@ std::optional<SequentialList> SyntaxTree::sequential_list(Tokenizer &tokenizer) 
  */
 std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 {
-    auto command = this->command(tokenizer);
-    if (!command.has_value())
+    auto pipeline = this->pipeline(tokenizer);
+    if (!pipeline.has_value())
     {
         return std::nullopt;
     }
 
-    OpList retval = std::move(*command);
+    OpList retval = std::move(*pipeline);
 
     for (;;)
     {
@@ -159,10 +159,10 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
             break;
         }
 
-        // The next tokens must be a command
+        // The next tokens must be a pipeline
         // TODO: do some error handling?
-        auto lhs_command = this->command(sub_tok);
-        if (!lhs_command.has_value())
+        auto rhs_pipeline = this->pipeline(sub_tok);
+        if (!rhs_pipeline.has_value())
         {
             break;
         }
@@ -171,7 +171,7 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
         {
             AndList and_and{
                 .left = std::make_unique<OpList>(std::move(retval)),
-                .right = std::make_unique<OpList>(std::move(*lhs_command)),
+                .right = std::make_unique<OpList>(std::move(*rhs_pipeline)),
             };
 
             retval = std::move(and_and);
@@ -180,7 +180,7 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
         {
             OrList or_or{
                 .left = std::make_unique<OpList>(std::move(retval)),
-                .right = std::make_unique<OpList>(std::move(*lhs_command)),
+                .right = std::make_unique<OpList>(std::move(*rhs_pipeline)),
             };
 
             retval = std::move(or_or);
@@ -192,6 +192,65 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 
         // If the check passed advance the original tokenizer
         tokenizer = sub_tok;
+    }
+
+    return retval;
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * pipeline ::= command
+ *            | pipeline PIPE command
+ *            ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<Pipeline> 
+ */
+std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
+{
+    Pipeline retval{};
+
+    auto first_command = this->command(tokenizer);
+    if (!first_command.has_value())
+        return std::nullopt;
+
+    retval.right = std::make_unique<Command>(std::move(*first_command));
+
+    // Check if there are other commands to concatenate to the return value
+    for (;;)
+    {
+        // If the next token is not what we expect don't advance the tokenizer sequence
+        Tokenizer sub_token{tokenizer};
+
+        const auto pipe = sub_token.next_token();
+        if (!pipe.has_value())
+        {
+            break;
+        }
+
+        if (pipe->type != TokenType::pipe)
+        {
+            break;
+        }
+
+        auto next_command = this->command(sub_token);
+        if (!next_command.has_value())
+        {
+            // TODO: do some error handling
+            break;
+        }
+
+        Pipeline new_pipeline{
+            .left = std::make_unique<Pipeline>(std::move(retval)),
+            .right = std::make_unique<Command>(std::move(*next_command)),
+        };
+
+        retval = std::move(new_pipeline);
+
+        tokenizer = sub_token;
     }
 
     return retval;

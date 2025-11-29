@@ -171,6 +171,11 @@ ExecStats Executor::words(const Words &words) const
     return stats;
 }
 
+ExecStats Executor::pipeline(const Pipeline &pipeline) const
+{
+    return {};
+}
+
 ExecStats Executor::op_list(const OpList &list) const
 {
     const auto stats = std::visit(
@@ -179,8 +184,8 @@ ExecStats Executor::op_list(const OpList &list) const
             { return this->and_list(and_list); },
             [&](const OrList &or_list)
             { return this->or_list(or_list); },
-            [&](const Command &command)
-            { return this->command(command); },
+            [&](const Pipeline &pipeline)
+            { return this->pipeline(pipeline); },
         },
         list);
 
@@ -325,10 +330,10 @@ ExecStats Executor::execute() const
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    // std::println("=== SYNTAX TREE ===");
-    // std::println("{:#?}", *program);
+    std::println("=== SYNTAX TREE ===");
+    std::println("{:#?}", *program);
 
-    // std::println("=== COMMAND BEGIN ===");
+    std::println("=== COMMAND BEGIN ===");
 
     const auto retval = this->sequential_list(*program);
 

@@ -29,6 +29,7 @@ class Executor
     ExecStats and_list(const AndList &and_list) const;
     ExecStats or_list(const OrList &or_list) const;
     ExecStats words(const Words &words) const;
+    ExecStats pipeline(const Pipeline &pipeline) const;
     ExecStats op_list(const OpList &list) const;
     ExecStats sequential_list(const SequentialList &sequential_list) const;
     ExecStats command(const Command &command) const;
