@@ -4,6 +4,9 @@
       "label": "Build testsh (Debug)",
       "type": "shell",
       "command": "bazel build :testsh --compilation_mode=dbg",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": {
         "kind": "build",
         "isDefault": true

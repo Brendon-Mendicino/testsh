@@ -4,13 +4,14 @@
       "name": "(gdb) Launch",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceRoot}/bazel-bin/testsh",
+      "program": "${workspaceFolder}/bazel-bin/testsh",
       "args": [],
       "stopAtEntry": false,
-      "cwd": "${fileDirname}",
+      "cwd": "${workspaceFolder}",
       "environment": [],
       "externalConsole": false,
       "MIMode": "gdb",
+      "preLaunchTask": "Build testsh (Debug)",
       "setupCommands": [
         {
           "description": "Enable pretty-printing for gdb",
