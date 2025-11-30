@@ -1,5 +1,7 @@
 #include "syntax.h"
 #include <print>
+#include <cstdlib>
+#include <charconv>
 
 /**
  * @brief Use this function if you want to check an optional variant.
@@ -400,21 +402,21 @@ std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) co
 
     while (!tokenizer.next_is_eof())
     {
-        Tokenizer word_tok{tokenizer};
-        const auto arg = this->word(word_tok);
-        if (arg)
-        {
-            tokenizer = word_tok;
-            args.emplace_back(*arg);
-            continue;
-        }
-
         Tokenizer redirect_tok{tokenizer};
         auto redirect = this->io_redirect(redirect_tok);
         if (redirect)
         {
             tokenizer = redirect_tok;
             redirects.emplace_back(std::move(*redirect));
+            continue;
+        }
+
+        Tokenizer word_tok{tokenizer};
+        const auto arg = this->word(word_tok);
+        if (arg)
+        {
+            tokenizer = word_tok;
+            args.emplace_back(*arg);
             continue;
         }
 
@@ -454,6 +456,9 @@ std::optional<Redirect> SyntaxTree::io_redirect(Tokenizer &tokenizer) const
     {
         const auto tmp_num = std::string(number_token->value);
         new_redirect_fd = std::atoi(tmp_num.c_str());
+
+        // Commit advancement to the tokenizer
+        tokenizer.next_token();
     }
 
     auto redirect = this->io_file(tokenizer);
@@ -465,9 +470,38 @@ std::optional<Redirect> SyntaxTree::io_redirect(Tokenizer &tokenizer) const
             overloads{
                 [&](FileRedirect &file)
                 { file.redirect_fd = *new_redirect_fd; },
-                [&](FdRedirect &fd) {},
+                [&](FdRedirect &fd)
+                { fd.fd_to_replace = *new_redirect_fd; },
+                [&](CloseFd &close)
+                { close.fd = *new_redirect_fd; },
             },
             *redirect);
+    }
+
+    return redirect;
+}
+
+static Redirect convert_and_redirect(const int default_fd, const std::string_view filename)
+{
+    assertm(!filename.empty(), "filename must not be empty, other wise std::from_chars will fail");
+
+    Redirect redirect;
+
+    int fd{};
+    auto [ptr, ec] = std::from_chars(filename.data(), filename.data() + filename.size(), fd);
+
+    if (ec == std::errc())
+    {
+        redirect = FdRedirect{.fd_to_replace = default_fd, .fd_replacer = fd};
+    }
+    else if (filename == "-")
+    {
+        redirect = CloseFd{.fd = default_fd};
+    }
+    else
+    {
+        // TODO: error handling
+        throw std::runtime_error(std::format("Redirect is not a number or dash! fd={}", filename));
     }
 
     return redirect;
@@ -519,6 +553,14 @@ std::optional<Redirect> SyntaxTree::io_file(Tokenizer &tokenizer) const
 
     case TokenType::lessgreat:
         redirect = FileRedirect{.redirect_fd = STDIN_FILENO, .file_kind = OpenKind::rw, .filename = std::move(*filename)};
+        break;
+
+    case TokenType::lessand:
+        redirect = convert_and_redirect(STDIN_FILENO, *filename);
+        break;
+
+    case TokenType::greatand:
+        redirect = convert_and_redirect(STDOUT_FILENO, *filename);
         break;
 
     default:

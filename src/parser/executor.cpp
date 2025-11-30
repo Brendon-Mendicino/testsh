@@ -54,90 +54,146 @@ public:
     }
 };
 
-// TODO: Move this class with RAII
-static bool apply_redirections(const CommandState &state)
+static bool fd_is_valid(int fd)
 {
-    // close fds: leftover from the pipe() calls
-    for (const auto to_close : state.fd_to_close)
-    {
-        close(to_close);
-    }
+    return fcntl(fd, F_GETFD) != -1 || errno != EBADF;
+}
 
-    // Duplicate fds
-    for (const auto [to_replace, replacer] : state.redirects)
+/**
+ * This class destructor automatically calls close() on all the
+ * open file descriptors that the parent doesn't need to handle.
+ * 
+ */
+class RedirectController
+{
+    // tuple<to_replace, replacer>
+    std::vector<std::tuple<int, int>> file_redirects;
+    // tuple<to_replace, replacer>
+    std::vector<std::tuple<int, int>> duplications;
+    std::vector<int> fd_to_close;
+
+public:
+    RedirectController(const CommandState &state) : file_redirects(state.redirects), duplications(), fd_to_close(state.fd_to_close) {}
+
+    RedirectController(const RedirectController &f) = delete;
+    RedirectController(RedirectController &&f) = delete;
+    RedirectController& operator=(const RedirectController &f) = delete;
+    RedirectController& operator=(RedirectController &&f) = delete;
+
+    ~RedirectController()
     {
-        const int retval = dup2(replacer, to_replace);
-        if (retval == -1)
+        // When the object is destructed only close the fds that are originated
+        // from a file. The duplications<> must not be touched by the parent,
+        // redirections are only need for the child. For this reason
+        // the duplicatoion fds on the parent must remain intact.
+        for (const auto [_, replacer] : this->file_redirects)
         {
-            std::println(stderr, "dup2: {}", std::strerror(errno));
-            return false;
+            close(replacer);
         }
     }
 
-    return true;
-}
-
-static void close_redirections(const CommandState &state)
-{
-    for (const auto [_, replacer] : state.redirects)
+    bool add_redirects(const std::vector<Redirect> &redirections)
     {
-        close(replacer);
-    }
-}
-
-static bool handle_redirections(CommandState &state, const std::vector<Redirect> &redirections)
-{
-    // TODO: handle file close in case of failure
-    for (const auto &redirect : redirections)
-    {
-        const auto [to_replace, replacer] = std::visit(
-            overloads{
-                [](const FileRedirect &file_r)
-                {
-                    int flags{};
-
-                    switch (file_r.file_kind)
+        for (const auto &redirect : redirections)
+        {
+            bool success = std::visit(
+                overloads{
+                    [&](const FileRedirect &file_r)
                     {
-                    case OpenKind::read:
-                        flags = O_RDONLY;
-                        break;
+                        int flags{};
 
-                    case OpenKind::replace:
-                        flags = O_CREAT | O_TRUNC | O_WRONLY;
-                        break;
+                        switch (file_r.file_kind)
+                        {
+                        case OpenKind::read:
+                            flags = O_RDONLY;
+                            break;
 
-                    case OpenKind::append:
-                        flags = O_CREAT | O_APPEND | O_WRONLY;
-                        break;
+                        case OpenKind::replace:
+                            flags = O_CREAT | O_TRUNC | O_WRONLY;
+                            break;
 
-                    case OpenKind::rw:
-                        flags = O_CREAT | O_RDWR;
-                        break;
-                    }
+                        case OpenKind::append:
+                            flags = O_CREAT | O_APPEND | O_WRONLY;
+                            break;
 
-                    std::string tmp_filename{file_r.filename};
-                    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
-                    int open_fd = open(tmp_filename.c_str(), flags, mode);
+                        case OpenKind::rw:
+                            flags = O_CREAT | O_RDWR;
+                            break;
+                        }
 
-                    return std::tuple{file_r.redirect_fd, open_fd};
+                        std::string tmp_filename{file_r.filename};
+                        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+                        int open_fd = open(tmp_filename.c_str(), flags, mode);
+
+                        if (open_fd == -1)
+                        {
+                            std::println(stderr, "open: {}", std::strerror(errno));
+                            return false;
+                        }
+
+                        this->file_redirects.emplace_back(file_r.redirect_fd, open_fd);
+                        return true;
+                    },
+                    [&](const FdRedirect &dup_fd)
+                    {
+                        // Check if the replacer fd exists
+                        if (!fd_is_valid(dup_fd.fd_replacer))
+                        {
+                            std::println(stderr, "testsh: file descriptor {} does not exist", dup_fd.fd_replacer);
+                            return false;
+                        }
+
+                        this->duplications.emplace_back(dup_fd.fd_to_replace, dup_fd.fd_replacer);
+                        return true;
+                    },
+                    [&](const CloseFd &close_fd)
+                    {
+                        this->fd_to_close.emplace_back(close_fd.fd);
+                        return true;
+                    },
                 },
-                [](const FdRedirect &fd_r)
-                { throw std::runtime_error("Not implemented"); },
-            },
-            redirect);
+                redirect);
 
-        
-        if (replacer == -1)
-        {
-            std::println(stderr, "open: {}", std::strerror(errno));
-            return false;
-        }
-
-        state.redirects.emplace_back(to_replace, replacer);
+            if (!success)
+                return false;
     }
 
     return true;
-}
+    }
+
+    bool apply_redirections() const
+    {
+        // close fds: leftover from the pipe() calls
+        for (const auto to_close : this->fd_to_close)
+        {
+            close(to_close);
+        }
+
+        // Duplicate fds from files
+        for (const auto [to_replace, replacer] : this->file_redirects)
+        {
+            const int retval = dup2(replacer, to_replace);
+            if (retval == -1)
+            {
+                std::println(stderr, "dup2: {}", std::strerror(errno));
+                return false;
+            }
+        }
+
+        // Duplicate fds from duplication syntax
+        for (const auto [to_replace, replacer] : this->duplications)
+        {
+            const int retval = dup2(replacer, to_replace);
+            if (retval == -1)
+            {
+                std::println(stderr, "dup2: {}", std::strerror(errno));
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
 
 static std::optional<std::tuple<int, int>> create_pipe()
 {
@@ -184,8 +240,12 @@ std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const
 
 ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState &state) const
 {
-    CommandState cmd_state{state};
-    if (!handle_redirections(cmd_state, cmd.redirections))
+    // Close the redirections used by the child, the parent no longer needs
+    // them. The unneeded files will be automatically closed when the
+    // destructor will be called.
+    RedirectController redirect{state};
+
+    if (!redirect.add_redirects(cmd.redirections))
     {
         return {.exit_code = 1};
     }
@@ -208,7 +268,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
         // Child
         // -----------
 
-        if (!apply_redirections(cmd_state))
+        if (!redirect.apply_redirections())
             exit(1);
 
         const ArgsToExec exec{cmd};
@@ -222,11 +282,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
     // Parent
     // -----------
 
-    // Close the redirections used by the child, the parent no longer needs
-    // them
-    close_redirections(cmd_state);
-
-    if (cmd_state.inside_pipeline)
+    if (state.inside_pipeline)
     {
         // TODO: mofiy this logic
         // Don't wait for the child
@@ -342,7 +398,11 @@ ExecStats Executor::command(const Command &command, const CommandState &state) c
 
 ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state) const
 {
-    // TODO: move forking in it's own function
+    // Close the redirections used by the child, the parent no longer needs
+    // them. The unneeded files will be automatically closed when the
+    // destructor will be called.
+    RedirectController redirect{state};
+
     pid_t pid = fork();
     if (pid == -1)
     {
@@ -355,7 +415,7 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
         // Child
         // -----------
 
-        if (!apply_redirections(state))
+        if (!redirect.apply_redirections())
             exit(1);
 
         const auto child_status = this->sequential_list(*subshell.seq_list);
@@ -365,10 +425,6 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
     // -----------
     // Parent
     // -----------
-
-    // Close the redirections used by the child, the parent no longer needs
-    // them
-    close_redirections(state);
 
     if (state.inside_pipeline)
     {

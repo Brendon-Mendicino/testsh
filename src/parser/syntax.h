@@ -28,9 +28,16 @@ struct FileRedirect
 
 struct FdRedirect
 {
+    int fd_to_replace;
+    int fd_replacer;
 };
 
-using Redirect = std::variant<FileRedirect/*, FdRedirect*/>;
+struct CloseFd
+{
+    int fd;
+};
+
+using Redirect = std::variant<FileRedirect, FdRedirect, CloseFd>;
 
 struct SimpleCommand
 {
@@ -177,6 +184,59 @@ struct std::formatter<FileRedirect> : debug_spec
                 red.redirect_fd,
                 to_string(red.file_kind),
                 red.filename);
+        }
+    }
+};
+
+template <>
+struct std::formatter<FdRedirect> : debug_spec
+{
+    auto format(const FdRedirect &red, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            const std::string sspaces(this->spaces, ' ');
+
+            return std::format_to(
+                ctx.out(),
+                "FdRedirect(\n{}fd_to_replace={},\n{}fd_replacer={})",
+                sspaces,
+                red.fd_to_replace,
+                sspaces,
+                red.fd_replacer);
+        }
+        else
+        {
+            return std::format_to(
+                ctx.out(),
+                "FdRedirect(fd_to_replace={}, fd_replacer={})",
+                red.fd_to_replace,
+                red.fd_replacer);
+        }
+    }
+};
+
+template <>
+struct std::formatter<CloseFd> : debug_spec
+{
+    auto format(const CloseFd &red, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            const std::string sspaces(this->spaces, ' ');
+
+            return std::format_to(
+                ctx.out(),
+                "CloseFd(\n{}fd={})",
+                sspaces,
+                red.fd);
+        }
+        else
+        {
+            return std::format_to(
+                ctx.out(),
+                "CloseFd(fd={})",
+                red.fd);
         }
     }
 };
