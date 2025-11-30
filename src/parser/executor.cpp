@@ -408,6 +408,11 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
     // destructor will be called.
     RedirectController redirect{state};
 
+    if (!redirect.add_redirects(subshell.redirections))
+    {
+        return {.exit_code = 1};
+    }
+
     pid_t pid = fork();
     if (pid == -1)
     {
@@ -547,10 +552,10 @@ ExecStats Executor::execute() const
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    std::println("=== SYNTAX TREE ===");
-    std::println("{:#?}", *program);
+    std::println(stderr, "=== SYNTAX TREE ===");
+    std::println(stderr, "{:#?}", *program);
 
-    std::println("=== COMMAND BEGIN ===");
+    std::println(stderr, "=== COMMAND BEGIN ===");
 
     const auto retval = this->program(*program);
 

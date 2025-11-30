@@ -21,8 +21,14 @@ static const std::vector<Specification> specs{
 
     // New line
     {R"(^(\n))", TokenType::new_line},
+    
+    // IO Number:
+    // This number must attached to the redirect operators beginning.
+    // Must have greater precedence than number otherwise it will be
+    // matched before this one.
+    {R"(^(\d+)(?:<|>))", TokenType::io_number},
 
-    // word kinds
+    // Word kinds
     {R"(^(\d+))", TokenType::number},
     {R"(^([\w\-\/.]+))", TokenType::word},
 

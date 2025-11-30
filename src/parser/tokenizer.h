@@ -21,6 +21,7 @@ enum class TokenType
     or_or,
     bang,
     pipe,
+    io_number,
     less,
     great,
     dless,
@@ -112,6 +113,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "bang";
     case TokenType::pipe:
         return "pipe";
+    case TokenType::io_number:
+        return "io_number";
     case TokenType::less:
         return "less";
     case TokenType::great:

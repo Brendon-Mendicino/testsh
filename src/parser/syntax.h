@@ -83,6 +83,7 @@ struct Pipeline
 struct Subshell
 {
     std::unique_ptr<SequentialList> seq_list;
+    std::vector<Redirect> redirections;
 };
 
 using CompleteCommands = std::vector<SequentialList>;
@@ -123,13 +124,13 @@ public:
 
     std::optional<Command> command(Tokenizer &tokenizer) const;
 
-    // std::optional<CompoundCommand> compound_command(Tokenizer &tokenizer) const;
+    std::optional<Subshell> compound_command(Tokenizer &tokenizer) const;
 
     std::optional<Subshell> subshell(Tokenizer &tokenizer) const;
 
     std::optional<SimpleCommand> simple_command(Tokenizer &tokenizer) const;
 
-    // std::optional<std::vector<Redirect>> redirect_list(Tokenizer &tokenizer) const;
+    std::optional<std::vector<Redirect>> redirect_list(Tokenizer &tokenizer) const;
 
     std::optional<Redirect> io_redirect(Tokenizer &tokenizer) const;
 
@@ -288,14 +289,17 @@ struct std::formatter<Subshell> : debug_spec
 
             std::format_to(ctx.out(), "Subshell(\n{}seq_list=", sspaces);
             this->p_format(subshell.seq_list, ctx);
+            std::format_to(ctx.out(), "\n{}redirections=", sspaces);
+            this->p_format(subshell.redirections, ctx);
             return std::format_to(ctx.out(), ")");
         }
         else
         {
             return std::format_to(
                 ctx.out(),
-                "Subshell(seq_list={:?})",
-                subshell.seq_list);
+                "Subshell(seq_list={:?}, redirections={:?})",
+                subshell.seq_list,
+                subshell.redirections);
         }
     }
 };

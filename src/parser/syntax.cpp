@@ -246,15 +246,15 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
  * pipeline ::=      pipe_sequence
  *            | Bang pipe_sequence
  *            ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<Pipeline> 
+ *
+ * @param tokenizer
+ * @return std::optional<Pipeline>
  */
 std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
 {
@@ -340,7 +340,8 @@ std::optional<Pipeline> SyntaxTree::pipe_sequence(Tokenizer &tokenizer) const
  *
  * ```
  * command ::= simple_command
- *           | subshell
+ *           | compound_command
+ *           | compound_command redirect_list
  *           ;
  * ```
  *
@@ -352,10 +353,48 @@ std::optional<Command> SyntaxTree::command(Tokenizer &tokenizer) const
     if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree::simple_command))
         return syn_words;
 
-    if (auto syn_subshell = this->check<Command>(tokenizer, &SyntaxTree::subshell))
-        return syn_subshell;
+    Tokenizer subshell_tok{tokenizer};
+    auto subshell = this->compound_command(subshell_tok);
+    if (subshell)
+    {
+        tokenizer = subshell_tok;
+
+        // Add redirect list if present
+        Tokenizer redirect_tok{tokenizer};
+        auto redirect_list = this->redirect_list(redirect_tok);
+        if (redirect_list)
+        {
+            subshell->redirections = std::move(*redirect_list);
+            tokenizer = redirect_tok;
+        }
+
+        return subshell;
+    }
 
     return std::nullopt;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * compound_command ::= brace_group
+ *                    | subshell
+ *                    | for_clause
+ *                    | case_clause
+ *                    | if_clause
+ *                    | while_clause
+ *                    | until_clause
+ *                    ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<Command>
+ */
+std::optional<Subshell> SyntaxTree::compound_command(Tokenizer &tokenizer) const
+{
+    // TODO: modify return value with appropriate variant
+    return this->subshell(tokenizer);
 }
 
 /**
@@ -466,6 +505,41 @@ std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) co
  * BNF:
  *
  * ```
+ * redirect_list ::=               io_redirect
+ *                 | redirect_list io_redirect
+ *                 ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<std::vector<Redirect>>
+ */
+std::optional<std::vector<Redirect>> SyntaxTree::redirect_list(Tokenizer &tokenizer) const
+{
+    auto first_redirect = this->io_redirect(tokenizer);
+    if (!first_redirect)
+        return std::nullopt;
+
+    std::vector redirects{std::move(*first_redirect)};
+
+    for (;;)
+    {
+        Tokenizer sub_tok{tokenizer};
+        auto next_redirect = this->io_redirect(tokenizer);
+
+        if (!next_redirect)
+            break;
+
+        redirects.emplace_back(std::move(*next_redirect));
+        tokenizer = sub_tok;
+    }
+
+    return redirects;
+}
+
+/**
+ * BNF:
+ *
+ * ```
  * io_redirect ::=           io_file
  *               | IO_NUMBER io_file
  *               |           io_here
@@ -480,17 +554,18 @@ std::optional<Redirect> SyntaxTree::io_redirect(Tokenizer &tokenizer) const
 {
     std::optional<int> new_redirect_fd;
 
-    const auto number_token = tokenizer.peek();
-    if (!number_token.has_value())
+    Tokenizer number_tok{tokenizer};
+    const auto io_number = number_tok.next_token();
+    if (!io_number)
         return std::nullopt;
 
-    if (number_token->type == TokenType::number)
+    if (io_number->type == TokenType::io_number)
     {
-        const auto tmp_num = std::string(number_token->value);
+        const auto tmp_num = std::string(io_number->value);
         new_redirect_fd = std::atoi(tmp_num.c_str());
 
         // Commit advancement to the tokenizer
-        tokenizer.next_token();
+        tokenizer = number_tok;
     }
 
     auto redirect = this->io_file(tokenizer);
