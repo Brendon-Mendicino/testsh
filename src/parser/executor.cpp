@@ -350,7 +350,12 @@ ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state
         this->pipeline(**pipeline.left, {.inside_pipeline = true, .redirects = {{STDOUT_FILENO, writer_fd}}, .fd_to_close = {reader_fd}});
     }
 
-    const auto retval = this->command(*pipeline.right, left_state);
+    auto retval = this->command(*pipeline.right, left_state);
+
+    if (pipeline.negated)
+    {
+        retval.exit_code = (retval.exit_code != 0) ? 0 : 1;
+    }
 
     return retval;
 }

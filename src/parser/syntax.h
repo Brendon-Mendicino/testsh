@@ -76,6 +76,8 @@ struct Pipeline
 {
     optional_ptr<Pipeline> left;
     std::unique_ptr<Command> right;
+    // TODO: remember to add this to the formatter
+    bool negated;
 };
 
 struct Subshell
@@ -116,6 +118,8 @@ public:
     std::optional<OpList> op_list(Tokenizer &tokenizer) const;
 
     std::optional<Pipeline> pipeline(Tokenizer &tokenizer) const;
+
+    std::optional<Pipeline> pipe_sequence(Tokenizer &tokenizer) const;
 
     std::optional<Command> command(Tokenizer &tokenizer) const;
 

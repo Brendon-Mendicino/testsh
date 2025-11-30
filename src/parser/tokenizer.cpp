@@ -19,6 +19,7 @@ static const std::vector<Specification> specs{
     {R"(^(&&))", TokenType::and_and},
     {R"(^(\|\|))", TokenType::or_or},
 
+    // New line
     {R"(^(\n))", TokenType::new_line},
 
     // word kinds
@@ -29,6 +30,7 @@ static const std::vector<Specification> specs{
     {R"(^("[^']"))", TokenType::string},
     {R"(^('[^']'))", TokenType::string},
 
+    // Bang
     {R"(^(!))", TokenType::bang},
 
     // Redirections
@@ -41,6 +43,7 @@ static const std::vector<Specification> specs{
     {R"(^(<<))", TokenType::dless},
     {R"(^(<))", TokenType::less},
 
+    // EOF
     {R"(^(\z))", TokenType::eof},
 };
 

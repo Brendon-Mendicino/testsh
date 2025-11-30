@@ -246,17 +246,49 @@ std::optional<OpList> SyntaxTree::op_list(Tokenizer &tokenizer) const
 
 /**
  * BNF:
+ * 
+ * ```
+ * pipeline ::=      pipe_sequence
+ *            | Bang pipe_sequence
+ *            ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<Pipeline> 
+ */
+std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
+{
+    bool has_bang = false;
+
+    const auto bang = tokenizer.peek();
+    if (bang && bang->type == TokenType::bang)
+    {
+        has_bang = true;
+        tokenizer.next_token();
+    }
+
+    auto pipe_sequence = this->pipe_sequence(tokenizer);
+    if (pipe_sequence)
+    {
+        pipe_sequence->negated = has_bang;
+    }
+
+    return pipe_sequence;
+}
+
+/**
+ * BNF:
  *
  * ```
- * pipeline ::= command
- *            | pipeline PIPE command
- *            ;
+ * pipe_sequence ::=                             command
+ *                 | pipe_sequence '|' linebreak command
+ *                 ;
  * ```
  *
  * @param tokenizer
  * @return std::optional<Pipeline>
  */
-std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
+std::optional<Pipeline> SyntaxTree::pipe_sequence(Tokenizer &tokenizer) const
 {
     Pipeline retval{};
 
