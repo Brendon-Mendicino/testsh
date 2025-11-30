@@ -73,6 +73,9 @@ std::optional<CompleteCommands> SyntaxTree::complete_commands(Tokenizer &tokeniz
     while (auto complete_command = this->complete_command(tokenizer))
     {
         complete_commands.emplace_back(std::move(*complete_command));
+
+        if (!this->newline_list(tokenizer))
+            break;
     }
 
     return complete_commands;
@@ -704,6 +707,60 @@ std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
         return std::nullopt;
 
     return word->value;
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * newline_list ::=              NEWLINE
+ *                | newline_list NEWLINE
+ *                ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<std::string_view> 
+ */
+bool SyntaxTree::newline_list(Tokenizer &tokenizer) const
+{
+    const auto newline = tokenizer.next_token();
+    if (!newline)
+        return false;
+
+    if (newline->type != TokenType::new_line)
+        return false;
+
+    for (;;)
+    {
+        const auto next_newline = tokenizer.peek();
+        if (!newline || next_newline->type != TokenType::new_line)
+            break;
+
+        tokenizer.next_token();
+    }
+
+    return true;
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * linebreak ::= newline_list
+ *             | EMPTY
+ *             ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return true 
+ * @return false 
+ */
+bool SyntaxTree::linebreak(Tokenizer &tokenizer) const
+{
+    if (tokenizer.next_is_eof())
+        return true;
+
+    return this->newline_list(tokenizer);
 }
 
 std::optional<std::string_view> SyntaxTree::word(Tokenizer &tokenizer) const

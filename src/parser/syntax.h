@@ -140,6 +140,10 @@ public:
 
     std::optional<std::string_view> filename(Tokenizer &tokenizer) const;
 
+    bool newline_list(Tokenizer &tokenizer) const;
+
+    bool linebreak(Tokenizer &tokenizer) const;
+
     std::optional<std::string_view> word(Tokenizer &tokenizer) const;
 };
 

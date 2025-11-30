@@ -12,6 +12,7 @@
 #include <cerrno>
 #include <stdexcept>
 #include <cstring>
+#include <algorithm>
 
 class ArgsToExec
 {
@@ -485,14 +486,14 @@ bool Executor::line_has_continuation() const
                        { return token.type; })
             .value_or(TokenType::eof);
 
-    while (next != TokenType::eof)
+    while (next != TokenType::eof && next != TokenType::new_line)
     {
         prev = next;
 
         next =
             tokenizer
                 .next_token()
-                .transform([](const Token &&token)
+                .transform([](const Token &token)
                            { return token.type; })
                 .value_or(TokenType::eof);
     }
@@ -513,6 +514,7 @@ bool Executor::read_stdin()
         return false;
     }
 
+    new_line += "\n";
     this->input_buffer.emplace_back(std::move(new_line));
 
     return true;
@@ -524,18 +526,20 @@ ExecStats Executor::execute() const
     // and the subsequent lines are pasted togheter
     std::vector<std::string> support;
 
+    // TODO: move in its own logic
     for (const auto &line : this->input_buffer)
     {
-        if (support.size() == 0)
+        if (support.empty())
         {
             support.emplace_back(line);
             continue;
         }
 
-        auto &last = support.back();
+        std::string &last = support.back();
+        std::string_view end = last.substr(std::max<size_t>(0, last.size() - 2));
 
-        if (last.back() == '\\')
-            last = last.substr(0, last.size() - 1) + line;
+        if (end == "\\\n")
+            last = last.substr(0, last.size() - 2) + line;
         else
             support.emplace_back(line);
     }

@@ -8,7 +8,7 @@
 static const std::vector<Specification> specs{
     // Separators
     {R"(^( +))", TokenType::separator},
-    {R"(^(\\)$)", TokenType::line_continuation},
+    {R"(^(\\)\n$)", TokenType::line_continuation},
 
     // Subshell
     {R"(^(\())", TokenType::open_round},
