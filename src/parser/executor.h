@@ -45,6 +45,7 @@ class Executor
 
     bool line_has_continuation() const;
     bool read_stdin();
+    std::vector<std::string> process_input() const;
     ExecStats execute() const;
 
 public:

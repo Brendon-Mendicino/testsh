@@ -40,7 +40,7 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
  * @param tokenizer
  * @return std::optional<ThisProgram>
  */
-std::optional<ThisProgram> SyntaxTree::build(Tokenizer &tokenizer)
+std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer)
 {
     if (tokenizer.next_is_eof())
         return {};

@@ -63,7 +63,7 @@ static bool fd_is_valid(int fd)
 /**
  * This class destructor automatically calls close() on all the
  * open file descriptors that the parent doesn't need to handle.
- * 
+ *
  */
 class RedirectController
 {
@@ -78,8 +78,8 @@ public:
 
     RedirectController(const RedirectController &f) = delete;
     RedirectController(RedirectController &&f) = delete;
-    RedirectController& operator=(const RedirectController &f) = delete;
-    RedirectController& operator=(RedirectController &&f) = delete;
+    RedirectController &operator=(const RedirectController &f) = delete;
+    RedirectController &operator=(RedirectController &&f) = delete;
 
     ~RedirectController()
     {
@@ -157,9 +157,9 @@ public:
 
             if (!success)
                 return false;
-    }
+        }
 
-    return true;
+        return true;
     }
 
     bool apply_redirections() const
@@ -498,7 +498,10 @@ bool Executor::line_has_continuation() const
                 .value_or(TokenType::eof);
     }
 
-    return prev == TokenType::line_continuation || prev == TokenType::and_and || prev == TokenType::or_or || prev == TokenType::pipe;
+    return prev == TokenType::line_continuation ||
+           prev == TokenType::and_and ||
+           prev == TokenType::or_or ||
+           prev == TokenType::pipe;
 }
 
 bool Executor::read_stdin()
@@ -520,7 +523,7 @@ bool Executor::read_stdin()
     return true;
 }
 
-ExecStats Executor::execute() const
+std::vector<std::string> Executor::process_input() const
 {
     // Create a support buffer where the line_continuations are cut
     // and the subsequent lines are pasted togheter
@@ -543,6 +546,17 @@ ExecStats Executor::execute() const
         else
             support.emplace_back(line);
     }
+    
+    // TODO: temp make it multiline
+    for (auto &line : support)
+    {
+        
+    }
+}
+
+ExecStats Executor::execute() const
+{
+    auto support = this->process_input();
 
     Tokenizer tokenizer{support};
     SyntaxTree tree;
@@ -551,7 +565,7 @@ ExecStats Executor::execute() const
     if (tokenizer.next_is_eof())
         return {};
 
-    const auto program = tree.build(tokenizer);
+    const auto program = tree.program(tokenizer);
 
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
