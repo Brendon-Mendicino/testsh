@@ -6,6 +6,7 @@
 #include <variant>
 #include <memory>
 #include <unistd.h>
+#include <fcntl.h>
 #include <wait.h>
 #include <print>
 #include <cerrno>
@@ -84,6 +85,60 @@ static void close_redirections(const CommandState &state)
     }
 }
 
+static bool handle_redirections(CommandState &state, const std::vector<Redirect> &redirections)
+{
+    // TODO: handle file close in case of failure
+    for (const auto &redirect : redirections)
+    {
+        const auto [to_replace, replacer] = std::visit(
+            overloads{
+                [](const FileRedirect &file_r)
+                {
+                    int flags{};
+
+                    switch (file_r.file_kind)
+                    {
+                    case OpenKind::read:
+                        flags = O_RDONLY;
+                        break;
+
+                    case OpenKind::replace:
+                        flags = O_CREAT | O_TRUNC | O_WRONLY;
+                        break;
+
+                    case OpenKind::append:
+                        flags = O_CREAT | O_APPEND | O_WRONLY;
+                        break;
+
+                    case OpenKind::rw:
+                        flags = O_CREAT | O_RDWR;
+                        break;
+                    }
+
+                    std::string tmp_filename{file_r.filename};
+                    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+                    int open_fd = open(tmp_filename.c_str(), flags, mode);
+
+                    return std::tuple{file_r.redirect_fd, open_fd};
+                },
+                [](const FdRedirect &fd_r)
+                { throw std::runtime_error("Not implemented"); },
+            },
+            redirect);
+
+        
+        if (replacer == -1)
+        {
+            std::println(stderr, "open: {}", std::strerror(errno));
+            return false;
+        }
+
+        state.redirects.emplace_back(to_replace, replacer);
+    }
+
+    return true;
+}
+
 static std::optional<std::tuple<int, int>> create_pipe()
 {
     int pipefd[2] = {-1, -1};
@@ -129,6 +184,12 @@ std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const
 
 ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState &state) const
 {
+    CommandState cmd_state{state};
+    if (!handle_redirections(cmd_state, cmd.redirections))
+    {
+        return {.exit_code = 1};
+    }
+
     // Check if a builtin can be run first before, before running
     // the program through exec().
     const auto builtin_run = this->builtin(cmd);
@@ -147,7 +208,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
         // Child
         // -----------
 
-        if (!apply_redirections(state))
+        if (!apply_redirections(cmd_state))
             exit(1);
 
         const ArgsToExec exec{cmd};
@@ -157,22 +218,20 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
         exit(1);
     }
 
-
     // -----------
     // Parent
     // -----------
 
     // Close the redirections used by the child, the parent no longer needs
     // them
-    close_redirections(state);
+    close_redirections(cmd_state);
 
-    if (state.inside_pipeline)
+    if (cmd_state.inside_pipeline)
     {
         // TODO: mofiy this logic
         // Don't wait for the child
-        return { .child_pid = pid };
+        return {.child_pid = pid};
     }
-
 
     int child_status;
     pid_t child_wait = waitpid(pid, &child_status, 0);
@@ -315,7 +374,7 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
     {
         // TODO: mofiy this logic
         // Don't wait for the child
-        return { .child_pid = pid };
+        return {.child_pid = pid};
     }
 
     int wstatus{};
@@ -345,7 +404,6 @@ ExecStats Executor::program(const ThisProgram &program) const
 
     return retval;
 }
-
 
 bool Executor::line_has_continuation() const
 {
