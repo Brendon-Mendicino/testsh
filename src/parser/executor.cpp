@@ -498,7 +498,7 @@ bool Executor::line_has_continuation() const
                 .value_or(TokenType::eof);
     }
 
-    return prev == TokenType::line_continuation || prev == TokenType::and_and || prev == TokenType::or_or;
+    return prev == TokenType::line_continuation || prev == TokenType::and_and || prev == TokenType::or_or || prev == TokenType::pipe;
 }
 
 bool Executor::read_stdin()
