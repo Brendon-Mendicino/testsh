@@ -118,7 +118,7 @@ public:
 
     std::optional<SequentialList> list(Tokenizer &tokenizer) const;
 
-    std::optional<OpList> op_list(Tokenizer &tokenizer) const;
+    std::optional<OpList> and_or(Tokenizer &tokenizer) const;
 
     std::optional<Pipeline> pipeline(Tokenizer &tokenizer) const;
 
@@ -144,9 +144,11 @@ public:
 
     bool newline_list(Tokenizer &tokenizer) const;
 
-    bool linebreak(Tokenizer &tokenizer) const;
+    void linebreak(Tokenizer &tokenizer) const;
 
     std::optional<std::string_view> word(Tokenizer &tokenizer) const;
+
+    inline std::optional<Token> token(Tokenizer &tokenizer, const TokenType type) const;
 };
 
 // ----------------
