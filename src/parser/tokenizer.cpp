@@ -32,7 +32,6 @@ static const std::vector<Specification> specs{
     {R"(^(\d+)(?:<|>))", TokenType::io_number},
 
     // Word kinds
-    {R"(^(\d+))", TokenType::number},
     {R"(^([\w\-\/.]+))", TokenType::word},
 
     // Strings

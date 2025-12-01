@@ -11,7 +11,6 @@
 
 enum class TokenType
 {
-    number,
     word,
     string,
     separator,
@@ -100,8 +99,6 @@ constexpr std::string_view to_string(const TokenType token)
 {
     switch (token)
     {
-    case TokenType::number:
-        return "number";
     case TokenType::word:
         return "word";
     case TokenType::separator:

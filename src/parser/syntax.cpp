@@ -734,7 +734,7 @@ std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
         return std::nullopt;
 
     const auto type = word->type;
-    if (type != TokenType::word && type != TokenType::number)
+    if (type != TokenType::word)
         return std::nullopt;
 
     return word->value;
@@ -796,12 +796,14 @@ bool SyntaxTree::linebreak(Tokenizer &tokenizer) const
 
 std::optional<std::string_view> SyntaxTree::word(Tokenizer &tokenizer) const
 {
-    const auto word = tokenizer.next_token();
-    if (!word.has_value())
+    const auto word = tokenizer.peek();
+    if (!word)
         return std::nullopt;
 
-    if (word->type != TokenType::word && word->type != TokenType::number)
+    if (word->type != TokenType::word)
         return std::nullopt;
+
+    tokenizer.next_token();
 
     return word->value;
 }
