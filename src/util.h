@@ -112,6 +112,25 @@ inline std::string typeid_name()
     return name;
 }
 
+template <size_t BUF_SIZE = 4096>
+struct fd_streambuf : std::streambuf
+{
+    int fd;
+    char buf[BUF_SIZE];
+
+    fd_streambuf(int fd) : fd(fd) {}
+
+protected:
+    int_type underflow() override
+    {
+        ssize_t n = ::read(fd, buf, sizeof(buf));
+        if (n <= 0)
+            return traits_type::eof();
+        setg(buf, buf, buf + n);
+        return traits_type::to_int_type(*gptr());
+    }
+};
+
 template <typename T, typename CharT>
 struct std::formatter<std::vector<T>, CharT>
 {

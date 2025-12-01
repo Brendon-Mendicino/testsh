@@ -32,6 +32,7 @@ enum class TokenType
     dlessdash,
     open_round,
     close_round,
+    andopen,
     line_continuation,
     eof,
 };
@@ -54,35 +55,41 @@ struct Specification
  * Use UnbufferedTokenizer to process a single line of
  * the user input.
  */
-class UnbufferedTokenizer
+struct UnbufferedTokenizer
 {
     std::string_view input;
     size_t string_offset = 0;
 
-public:
-    UnbufferedTokenizer(std::string_view input);
 
     std::optional<Token> next_token();
-
-    std::optional<Token> next_token_with_separators();
 
     bool next_is_eof() const;
 
     std::optional<Token> peek() const;
 };
 
-class Tokenizer
+struct TokState
 {
     std::span<std::string> buffered_input;
     UnbufferedTokenizer inner_tokenizer;
+};
 
+class Tokenizer
+{
+    TokState state;
+    std::optional<TokState> prev_state;
+
+    Tokenizer(const TokState &state);
+    void update_prev();
     bool advance_buffer();
 public:
     Tokenizer(std::span<std::string> buffered_input);
 
-    std::optional<Token> next_token();
+    size_t buffer_size() const;
 
-    std::optional<Token> next_token_with_separators();
+    std::optional<Tokenizer> prev() const;
+
+    std::optional<Token> next_token();
 
     bool next_is_eof() const;
 
@@ -135,6 +142,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "open_round";
     case TokenType::close_round:
         return "close_round";
+    case TokenType::andopen:
+        return "andopen";
     case TokenType::line_continuation:
         return "line_continuation";
     case TokenType::eof:

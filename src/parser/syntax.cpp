@@ -30,6 +30,37 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
 
 /**
  * BNF:
+ * 
+ * ```
+ * program_substitution ::= ANDOPEN program CLOSE_ROUND
+ *                        ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<ThisProgram> 
+ */
+std::optional<ThisProgram> SyntaxTree::program_substitution(Tokenizer &tokenizer) const
+{
+    const auto and_open = tokenizer.next_token();
+    if (!and_open)
+        return std::nullopt;
+
+    auto program = this->program(tokenizer);
+    if (!program)
+        return std::nullopt;
+
+    const auto close_round = tokenizer.next_token();
+    // TODO: error handling: print "missing closing paren"
+    if (!close_round && close_round->type != TokenType::close_round)
+        return std::nullopt;
+
+    return program;
+}
+
+
+
+/**
+ * BNF:
  *
  * ```
  * program ::= linebreak
@@ -40,7 +71,7 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
  * @param tokenizer
  * @return std::optional<ThisProgram>
  */
-std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer)
+std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer) const
 {
     if (tokenizer.next_is_eof())
         return {};

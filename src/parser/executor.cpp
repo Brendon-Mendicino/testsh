@@ -13,6 +13,9 @@
 #include <stdexcept>
 #include <cstring>
 #include <algorithm>
+#include <ranges>
+
+namespace vw = std::ranges::views;
 
 class ArgsToExec
 {
@@ -196,6 +199,11 @@ public:
     }
 };
 
+/**
+ * @brief Create a pipe object
+ *
+ * @return std::optional<std::tuple<int, int>> tuple{reader_fd, writer_fd};
+ */
 static std::optional<std::tuple<int, int>> create_pipe()
 {
     int pipefd[2] = {-1, -1};
@@ -523,6 +531,50 @@ bool Executor::read_stdin()
     return true;
 }
 
+std::string Executor::process_substitution(const ThisProgram &prog) const
+{
+    // Setup piping for stdout redirections
+    auto pipefd = create_pipe();
+    if (!pipefd)
+        throw std::runtime_error("pipe creation failed");
+
+    const auto [reader_fd, writer_fd] = *pipefd;
+
+    const pid_t pid = fork();
+    if (pid == -1)
+        throw std::runtime_error(std::format("fork failed: {}", std::strerror(errno)));
+
+    if (pid == 0)
+    {
+        // -----------
+        // Child
+        // -----------
+
+        close(reader_fd);
+        dup2(writer_fd, STDOUT_FILENO);
+
+        const auto stats = this->program(prog);
+
+        close(writer_fd);
+        exit(stats.exit_code);
+    }
+
+    // -----------
+    // Parent
+    // -----------
+
+    close(writer_fd);
+
+    fd_streambuf buf{reader_fd};
+    std::istream is(&buf);
+
+    std::string substitution(std::istreambuf_iterator<char>(is), {});
+
+    close(reader_fd);
+
+    return substitution;
+}
+
 std::vector<std::string> Executor::process_input() const
 {
     // Create a support buffer where the line_continuations are cut
@@ -539,19 +591,53 @@ std::vector<std::string> Executor::process_input() const
         }
 
         std::string &last = support.back();
-        std::string_view end = last.substr(std::max<size_t>(0, last.size() - 2));
+        std::string end = last.substr(std::max<size_t>(0, last.size() - 2));
 
         if (end == "\\\n")
             last = last.substr(0, last.size() - 2) + line;
         else
             support.emplace_back(line);
     }
-    
-    // TODO: temp make it multiline
-    for (auto &line : support)
+
+    // Try and substitute the programs in the support strings
+    Tokenizer process_subs_tok{support};
+
+    // Consume the tokenizer until we reach the opening of substitution command
+    while (auto subs_start = process_subs_tok.peek())
     {
-        
+        if (subs_start->type == TokenType::eof)
+            return support;
+
+        if (subs_start->type == TokenType::andopen)
+            break;
+
+        process_subs_tok.next_token();
     }
+
+    Tokenizer closing_tok{process_subs_tok};
+    const auto prog = SyntaxTree().program_substitution(closing_tok);
+    if (!prog)
+        return support;
+
+    // TODO: this part needs to be structured better
+    const Token starting_token = process_subs_tok.next_token().value();
+
+    size_t start_vec = support.size() - process_subs_tok.buffer_size();
+    size_t start_str = starting_token.start;
+
+    // Get the previous state of the tokenizer and get
+    const Token ending_token = closing_tok.prev().value().next_token().value();
+
+    size_t end_vec = support.size() - closing_tok.buffer_size();
+    size_t end_str = ending_token.end;
+
+    // Get the stdout of the child shell
+    const std::string substitution = this->process_substitution(*prog);
+
+    // TODO: for now ignore multilines
+    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str + 1);
+
+    return support;
 }
 
 ExecStats Executor::execute() const

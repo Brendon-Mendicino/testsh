@@ -14,6 +14,9 @@ static const std::vector<Specification> specs{
     {R"(^(\())", TokenType::open_round},
     {R"(^(\)))", TokenType::close_round},
 
+    // Command substitution
+    {R"(^(\$\())", TokenType::andopen},
+
     // List separators
     {R"(^(;))", TokenType::semicolon},
     {R"(^(&&))", TokenType::and_and},
@@ -21,7 +24,7 @@ static const std::vector<Specification> specs{
 
     // New line
     {R"(^(\n))", TokenType::new_line},
-    
+
     // IO Number:
     // This number must attached to the redirect operators beginning.
     // Must have greater precedence than number otherwise it will be
@@ -57,8 +60,6 @@ static const std::vector<Specification> specs{
 // UnbufferedTokenizer
 // ------------------------------------
 
-UnbufferedTokenizer::UnbufferedTokenizer(std::string_view input) : input(input) {}
-
 std::optional<Token> UnbufferedTokenizer::next_token()
 {
     std::string_view match{};
@@ -88,32 +89,6 @@ std::optional<Token> UnbufferedTokenizer::next_token()
     return std::nullopt;
 }
 
-std::optional<Token> UnbufferedTokenizer::next_token_with_separators()
-{
-    std::string_view match{};
-
-    for (const auto &spec : specs)
-    {
-        if (!RE2::PartialMatch(this->input, spec.regex, &match))
-            continue;
-
-        const Token token{
-            .type = spec.spec_type,
-            .value = match,
-            .start = this->string_offset,
-            .end = this->string_offset + match.length()};
-
-        assert(match.length() <= this->input.length());
-
-        this->input = this->input.substr(match.length());
-        this->string_offset += match.length();
-
-        return token;
-    }
-
-    return std::nullopt;
-}
-
 bool UnbufferedTokenizer::next_is_eof() const
 {
     if (const auto next = this->peek())
@@ -130,57 +105,65 @@ std::optional<Token> UnbufferedTokenizer::peek() const
 }
 
 // ------------------------------------
-// tokenizer
+// TOKENIZER
 // ------------------------------------
+
+Tokenizer::Tokenizer(const TokState &state) : state(state), prev_state() {}
+
+void Tokenizer::update_prev()
+{
+    this->prev_state = this->state;
+}
 
 /**
  * Advances the `buffered_input` and stores the leftover string
  * into a new UnbufferedTokenizer. The previous tokenizer must
  * be exausted before calling this method.
- * 
+ *
  * Returns false if the buffer was empty.
  */
 bool Tokenizer::advance_buffer()
 {
-    if (this->buffered_input.size() == 0)
+    if (this->state.buffered_input.size() == 0)
         return false;
 
-    assertm(this->inner_tokenizer.next_token().value().type == TokenType::eof, "The inner tokenizer must be empty before advancing the line buffer!");
+    assertm(this->state.inner_tokenizer.peek().value().type == TokenType::eof,
+            "The inner tokenizer must be empty before advancing the line buffer!");
 
-    this->inner_tokenizer = UnbufferedTokenizer{this->buffered_input[0]};
+    this->state.inner_tokenizer = UnbufferedTokenizer{this->state.buffered_input[0]};
 
-    this->buffered_input = this->buffered_input.subspan(1);
+    this->state.buffered_input = this->state.buffered_input.subspan(1);
 
     return true;
 }
 
-Tokenizer::Tokenizer(std::span<std::string> buffered_input) : buffered_input(buffered_input), inner_tokenizer("") {}
+Tokenizer::Tokenizer(std::span<std::string> buffered_input) : state{.buffered_input = buffered_input, .inner_tokenizer = {""}} {}
+
+size_t Tokenizer::buffer_size() const
+{
+    // +1 because the last buffer is contained inside the UnbufferedTokenizer
+    return this->state.buffered_input.size() + 1;
+}
+
+std::optional<Tokenizer> Tokenizer::prev() const
+{
+    if (!this->prev_state)
+        return std::nullopt;
+
+    return Tokenizer{*prev_state};
+}
 
 std::optional<Token> Tokenizer::next_token()
 {
-    auto token = this->inner_tokenizer.next_token();
+    this->update_prev();
+    auto token = this->state.inner_tokenizer.next_token();
 
     while (token.has_value() && token->type == TokenType::eof)
     {
         if (!this->advance_buffer())
             break;
 
-        token = this->inner_tokenizer.next_token();
-    }
-
-    return token;
-}
-
-std::optional<Token> Tokenizer::next_token_with_separators()
-{
-    auto token = this->inner_tokenizer.next_token_with_separators();
-
-    while (token.has_value() && token->type == TokenType::eof)
-    {
-        if (!this->advance_buffer())
-            break;
-
-        token = this->inner_tokenizer.next_token_with_separators();
+        token = this->state.inner_tokenizer.next_token();
     }
 
     return token;

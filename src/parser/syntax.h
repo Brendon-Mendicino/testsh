@@ -108,7 +108,9 @@ class SyntaxTree
     inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
 
 public:
-    std::optional<ThisProgram> program(Tokenizer &tokenizer);
+    std::optional<ThisProgram> program_substitution(Tokenizer &tokenizer) const;
+
+    std::optional<ThisProgram> program(Tokenizer &tokenizer) const;
 
     std::optional<CompleteCommands> complete_commands(Tokenizer &tokenizer) const;
 
