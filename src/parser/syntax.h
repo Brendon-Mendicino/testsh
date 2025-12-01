@@ -53,6 +53,7 @@ struct Pipeline;
 
 using Command = std::variant<SimpleCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
+// using List = std::variant<SequentialList, AsyncList>;
 
 struct AndList
 {
@@ -129,6 +130,10 @@ public:
     std::optional<Subshell> compound_command(Tokenizer &tokenizer) const;
 
     std::optional<Subshell> subshell(Tokenizer &tokenizer) const;
+
+    std::optional<SequentialList> compound_list(Tokenizer &tokenizer) const;
+
+    std::optional<SequentialList> term(Tokenizer &tokenizer) const;
 
     std::optional<SimpleCommand> simple_command(Tokenizer &tokenizer) const;
 

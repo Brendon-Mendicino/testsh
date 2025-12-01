@@ -30,7 +30,7 @@ struct CommandState
 class Executor
 {
     std::vector<std::string> input_buffer;
-    TerminalState terminal_state;
+    // TerminalState terminal_state;
 
     std::optional<ExecStats> builtin(const SimpleCommand &cmd) const;
     ExecStats simple_command(const SimpleCommand &cmd, const CommandState &state) const;

@@ -451,8 +451,8 @@ std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
         return std::nullopt;
 
     // TODO: change this to compound_list
-    auto complete_command = this->complete_command(sub_tokenizer);
-    if (!complete_command)
+    auto compound_list = this->compound_list(sub_tokenizer);
+    if (!compound_list)
         return std::nullopt;
 
     const auto close_round = this->token(sub_tokenizer, TokenType::close_round);
@@ -462,8 +462,90 @@ std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
     tokenizer = sub_tokenizer;
 
     return Subshell{
-        .seq_list = std::make_unique<SequentialList>(std::move(*complete_command)),
+        .seq_list = std::make_unique<SequentialList>(std::move(*compound_list)),
     };
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * compound_list ::= linebreak term
+ *                 | linebreak term separator
+ *                 ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<SequentialList> 
+ */
+std::optional<SequentialList> SyntaxTree::compound_list(Tokenizer &tokenizer) const
+{
+    Tokenizer sub_tok{tokenizer};
+
+    this->linebreak(sub_tok);
+
+    auto term = this->term(sub_tok);
+    if (!term)
+        return std::nullopt;
+
+    this->token(sub_tok, TokenType::semicolon);
+
+    tokenizer = sub_tok;
+
+    return term;
+}
+
+/**
+ * BNF:
+ * 
+ * ```
+ * term ::= term separator and_or
+ *        |                and_or
+ *        ;
+ * ```
+ * 
+ * @param tokenizer 
+ * @return std::optional<OpList> 
+ */
+std::optional<SequentialList> SyntaxTree::term(Tokenizer &tokenizer) const
+{
+    SequentialList retval{};
+
+    auto and_or = this->and_or(tokenizer);
+    if (!and_or)
+        return std::nullopt;
+
+    retval.right = std::make_unique<OpList>(std::move(*and_or));
+
+    // Check if there are other sequential list to concatenate to the return value
+    for (;;)
+    {
+        // If the next token is not what we expect don't advance the tokenizer sequence
+        Tokenizer sub_token{tokenizer};
+
+        const auto semi = this->token(sub_token, TokenType::semicolon);
+        if (!semi)
+        {
+            break;
+        }
+
+        auto next_op_list = this->and_or(sub_token);
+        if (!next_op_list.has_value())
+        {
+            break;
+        }
+
+        SequentialList rotated_list{
+            .left = std::make_unique<SequentialList>(std::move(retval)),
+            .right = std::make_unique<OpList>(std::move(*next_op_list)),
+        };
+
+        retval = std::move(rotated_list);
+
+        tokenizer = sub_token;
+    }
+
+    return retval;
 }
 
 /**
