@@ -200,7 +200,6 @@ public:
     }
 };
 
-
 // ----------------
 // FOMATTING
 // ----------------
@@ -225,29 +224,11 @@ struct std::formatter<FileRedirect> : debug_spec
 {
     auto format(const FileRedirect &red, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            return std::format_to(
-                ctx.out(),
-                "FileRedirect(\n{}redirect_fd={},\n{}file_kind={},\n{}filaname={})",
-                sspaces,
-                red.redirect_fd,
-                sspaces,
-                to_string(red.file_kind),
-                sspaces,
-                red.filename);
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "FileRedirect(redirect_fd={}, file_kind={}, filaname={})",
-                red.redirect_fd,
-                to_string(red.file_kind),
-                red.filename);
-        }
+        this->start<FileRedirect>(ctx);
+        this->field("redirect_fd", red.redirect_fd, ctx);
+        this->field("file_kind", to_string(red.file_kind), ctx);
+        this->field("filename", red.filename, ctx);
+        return this->finish(ctx);
     }
 };
 
@@ -256,26 +237,10 @@ struct std::formatter<FdRedirect> : debug_spec
 {
     auto format(const FdRedirect &red, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            return std::format_to(
-                ctx.out(),
-                "FdRedirect(\n{}fd_to_replace={},\n{}fd_replacer={})",
-                sspaces,
-                red.fd_to_replace,
-                sspaces,
-                red.fd_replacer);
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "FdRedirect(fd_to_replace={}, fd_replacer={})",
-                red.fd_to_replace,
-                red.fd_replacer);
-        }
+        this->start<FdRedirect>(ctx);
+        this->field("fd_to_replace", red.fd_to_replace, ctx);
+        this->field("fd_replacer", red.fd_replacer, ctx);
+        return this->finish(ctx);
     }
 };
 
@@ -284,23 +249,9 @@ struct std::formatter<CloseFd> : debug_spec
 {
     auto format(const CloseFd &red, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            return std::format_to(
-                ctx.out(),
-                "CloseFd(\n{}fd={})",
-                sspaces,
-                red.fd);
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "CloseFd(fd={})",
-                red.fd);
-        }
+        this->start<CloseFd>(ctx);
+        this->field("fd", red.fd, ctx);
+        return this->finish(ctx);
     }
 };
 
@@ -322,24 +273,10 @@ struct std::formatter<Subshell> : debug_spec
 {
     auto format(const Subshell &subshell, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            std::format_to(ctx.out(), "Subshell(\n{}seq_list=", sspaces);
-            this->p_format(subshell.seq_list, ctx);
-            std::format_to(ctx.out(), "\n{}redirections=", sspaces);
-            this->p_format(subshell.redirections, ctx);
-            return std::format_to(ctx.out(), ")");
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "Subshell(seq_list={:?}, redirections={:?})",
-                subshell.seq_list,
-                subshell.redirections);
-        }
+        this->start<Subshell>(ctx);
+        this->field("seq_list", subshell.seq_list, ctx);
+        this->field("redirections", subshell.redirections, ctx);
+        return this->finish(ctx);
     }
 };
 
@@ -353,22 +290,9 @@ struct std::formatter<T> : debug_spec
 {
     auto format(const T &node, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            std::format_to(ctx.out(), "{}(\n{}child=", typeid_name<T>(), sspaces);
-            this->p_format(node.child, ctx);
-            return std::format_to(ctx.out(), ")");
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "{}(child={:?})",
-                typeid_name<T>(),
-                node.child);
-        }
+        this->start<T>(ctx);
+        this->field("child", node.child, ctx);
+        return this->finish(ctx);
     }
 };
 
@@ -383,25 +307,10 @@ struct std::formatter<T> : debug_spec
 {
     auto format(const T &node, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            std::format_to(ctx.out(), "{}(\n{}left=", typeid_name<T>(), sspaces);
-            this->p_format(node.left, ctx);
-            std::format_to(ctx.out(), ",\n{}right=", sspaces);
-            this->p_format(node.right, ctx);
-            return std::format_to(ctx.out(), ")");
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "{}(left={:?}, right={:?})",
-                typeid_name<T>(),
-                node.left,
-                node.right);
-        }
+        this->start<T>(ctx);
+        this->field("left", node.left, ctx);
+        this->field("right", node.right, ctx);
+        return this->finish(ctx);
     }
 };
 

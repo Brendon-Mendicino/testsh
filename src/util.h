@@ -263,31 +263,19 @@ struct std::formatter<std::vector<T>, CharT> : debug_spec
     typename FormatContext::iterator
     format(const std::vector<T> &vec, FormatContext &ctx) const
     {
-        // Reuse existing formatter for elements
-        std::formatter<T, CharT> elem_fmt{*this};
-        const std::string sspaces(this->spaces, ' ');
-
         auto out = ctx.out();
         *out++ = '[';
 
         for (size_t i = 0; i < vec.size(); ++i)
         {
-            if (this->pretty)
-            {
-                out = std::format_to(ctx.out(), "\n{}", sspaces);
-                this->p_format(vec[i], ctx);
-            }
-            else
-            {
-                out = elem_fmt.format(vec[i], ctx);
-            }
-
-            if (i + 1 < vec.size())
-            {
-                *out++ = ',';
-                *out++ = ' ';
-            }
+            this->field(std::to_string(i), vec[i], ctx);
         }
+
+        if (this->pretty && !vec.empty())
+        {
+            std::format_to(out, "\n{}", std::string(this->spaces - 4, ' '));
+        }
+
 
         *out++ = ']';
         return out;
@@ -307,14 +295,11 @@ struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
 
         if (!ptr)
         {
-            return std::format_to(ctx.out(), "unique_ptr(null)");
+            return std::format_to(ctx.out(), "nullptr");
         }
 
         const T &elem = *ptr;
-
-        std::format_to(ctx.out(), "unique_ptr(");
-        elem_fmt.format(elem, ctx);
-        return std::format_to(ctx.out(), ")");
+        return elem_fmt.format(elem, ctx);
     }
 };
 
@@ -350,9 +335,7 @@ struct std::formatter<std::optional<T>, CharT> : debug_spec
 
         if (ptr.has_value())
         {
-            std::format_to(ctx.out(), "Some(");
-            elem_fmt.format(*ptr, ctx);
-            return std::format_to(ctx.out(), ")");
+            return elem_fmt.format(*ptr, ctx);
         }
         else
         {
