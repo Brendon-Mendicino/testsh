@@ -41,6 +41,36 @@ constexpr inline optional_ptr<T> make_optptr(Args &&...args)
     return std::optional<std::unique_ptr<T>>{std::make_unique<T>(std::forward<Args>(args)...)};
 }
 
+std::vector<std::string> split(const std::string &s, std::string_view delimiter);
+
+std::vector<std::string_view> split_sv(std::string_view s, std::string_view delimiter);
+
+template <typename T>
+concept HasFormatter =
+    requires(T value, std::format_context &ctx, std::formatter<T> fmt) {
+        { fmt.format(value, ctx) } -> std::same_as<typename std::format_context::iterator>;
+    };
+
+struct debug_spec;
+template <typename T, typename CharT = char>
+concept HasDebugFormatter = std::derived_from<std::formatter<T, CharT>, debug_spec>;
+
+template <typename T>
+inline std::string typeid_name()
+{
+    int status;
+    char *realname = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
+
+    if (realname == nullptr || status != 0)
+        throw std::runtime_error(std::format("typeid.name retrieval failed! status={}", status));
+
+    std::string name{realname};
+
+    std::free(realname);
+
+    return name;
+}
+
 // ----------------------------------
 // CLASSES
 // ----------------------------------
@@ -105,70 +135,68 @@ struct debug_spec
     template <typename T>
     auto start(auto &ctx) const
     {
-        std::format_to(ctx.out(), "{}(", typeid_name<T>());
-        if (this->pretty)
-        {
-            std::format_to(ctx, "\n{}", std::string(this->spaces, ' '));
-        }
-        return ctx;
+        return std::format_to(ctx.out(), "{}(", typeid_name<T>());
     }
 
-    template <typename Formatted>
-    auto field(std::string_view name, const Formatted &p, auto &ctx) const
+    template <typename Field>
+    auto field(std::string_view name, const Field &p, auto &ctx) const
     {
-        std::format_to(ctx, "{}=", name);
+        if (this->pretty)
+        {
+            std::format_to(ctx.out(), "\n{}", std::string(this->spaces, ' '));
+        }
 
-        this->p_format(p, ctx);
+        std::format_to(ctx.out(), "{}={}", name, p);
 
         if (this->pretty)
         {
-            std::format_to(ctx, ",\n{}", std::string(this->spaces, ' '));
+            std::format_to(ctx.out(), ",");
         }
         else
         {
-            std::format_to(ctx, ", ");
+            // WARNING: also the last item gets printed with
+            std::format_to(ctx.out(), ", ");
         }
 
-        return ctx;
+        return ctx.out();
     }
 
-    template <typename T>
+    template <typename Field>
+        requires HasDebugFormatter<Field>
+    auto field(std::string_view name, const Field &p, auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            std::format_to(ctx.out(), "\n{}", std::string(this->spaces, ' '));
+        }
+
+        std::format_to(ctx.out(), "{}=", name);
+
+        if (this->pretty)
+        {
+            this->p_format(p, ctx);
+            std::format_to(ctx.out(), ",");
+        }
+        else
+        {
+            std::format_to(ctx.out(), "{:?}", p);
+            // WARNING: also the last item gets printed with
+            std::format_to(ctx.out(), ", ");
+        }
+
+        return ctx.out();
+    }
+
     auto finish(auto &ctx) const
     {
         if (this->pretty)
         {
-            std::format_to(ctx.out(), "{}", std::string(this->spaces - 4, ' '));
+            std::format_to(ctx.out(), "\n{}", std::string(this->spaces - 4, ' '));
         }
 
         return std::format_to(ctx.out(), ")");
     }
 };
-
-std::vector<std::string> split(const std::string &s, std::string_view delimiter);
-
-std::vector<std::string_view> split_sv(std::string_view s, std::string_view delimiter);
-
-template <typename T>
-concept HasFormatter =
-    requires(T value, std::format_context &ctx, std::formatter<T> fmt) {
-        { fmt.format(value, ctx) } -> std::same_as<typename std::format_context::iterator>;
-    };
-
-template <typename T>
-inline std::string typeid_name()
-{
-    int status;
-    char *realname = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
-
-    if (realname == nullptr || status != 0)
-        throw std::runtime_error(std::format("typeid.name retrieval failed! status={}", status));
-
-    std::string name{realname};
-
-    std::free(realname);
-
-    return name;
-}
 
 template <size_t BUF_SIZE = 4096>
 struct fd_streambuf : std::streambuf

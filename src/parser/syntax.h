@@ -309,27 +309,11 @@ struct std::formatter<SimpleCommand> : debug_spec
 {
     auto format(const SimpleCommand &prog, auto &ctx) const
     {
-        if (this->pretty)
-        {
-            const std::string sspaces(this->spaces, ' ');
-
-            std::format_to(ctx.out(), "SimpleCommand(\n{}program=", sspaces);
-            this->p_format(prog.program, ctx);
-            std::format_to(ctx.out(), ",\n{}arguments=", sspaces);
-            this->p_format(prog.arguments, ctx);
-            std::format_to(ctx.out(), ",\n{}redirections=", sspaces);
-            this->p_format(prog.redirections, ctx);
-            return std::format_to(ctx.out(), ")");
-        }
-        else
-        {
-            return std::format_to(
-                ctx.out(),
-                "SimpleCommand(program={:?}, arguments={:?}, redirections={:?})",
-                prog.program,
-                prog.arguments,
-                prog.redirections);
-        }
+        this->start<SimpleCommand>(ctx);
+        this->field("program", prog.program, ctx);
+        this->field("arguments", prog.arguments, ctx);
+        this->field("redirections", prog.redirections, ctx);
+        return this->finish(ctx);
     }
 };
 
