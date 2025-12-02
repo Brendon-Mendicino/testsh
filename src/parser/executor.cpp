@@ -17,47 +17,6 @@
 
 namespace vw = std::ranges::views;
 
-class ArgsToExec
-{
-    typedef const char *args_array_t[];
-
-    std::vector<std::string> str_owner;
-    std::unique_ptr<args_array_t> args_array;
-    std::size_t args_size;
-
-public:
-    explicit ArgsToExec(const SimpleCommand &cmd)
-    {
-        const auto &args = cmd.arguments;
-
-        // +1 from program
-        // +1 from NULL terminator
-        this->args_size = args.size() + 2;
-
-        this->args_array = std::make_unique<args_array_t>(this->args_size);
-
-        this->str_owner.reserve(args.size() + 2);
-
-        // Push program first
-        this->str_owner.emplace_back(cmd.program);
-        this->args_array[0] = this->str_owner[0].c_str();
-
-        for (size_t i{}; i < args.size(); ++i)
-        {
-            auto &s = this->str_owner.emplace_back(args[i]);
-            this->args_array[i + 1] = s.c_str();
-        }
-
-        // The args array needs to be null-terminated
-        this->args_array[this->args_size - 1] = nullptr;
-    }
-
-    [[nodiscard]] auto args() const &
-    {
-        return &this->args_array;
-    }
-};
-
 static bool fd_is_valid(int fd)
 {
     return fcntl(fd, F_GETFD) != -1 || errno != EBADF;
@@ -220,15 +179,15 @@ static std::optional<std::tuple<int, int>> create_pipe()
 
 std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const
 {
-    if (cmd.program == "cd")
+    if (cmd.program.text() == "cd")
     {
-        const int exit_code = builtin_cd(cmd.arguments);
+        const int exit_code = builtin_cd(cmd);
         return ExecStats{
             .exit_code = exit_code,
         };
     }
 
-    else if (cmd.program == "exec")
+    else if (cmd.program.text() == "exec")
     {
         const int exit_code = builtin_exec(cmd);
         return ExecStats{
@@ -236,7 +195,7 @@ std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const
         };
     }
 
-    else if (cmd.program == "exit")
+    else if (cmd.program.text() == "exit")
     {
         const int exit_code = builtin_exit(cmd);
         return ExecStats{

@@ -11,53 +11,11 @@
 
 namespace fs = std::filesystem;
 
-// TODO: move this class and the other class
-class ArgsToExec
-{
-    typedef const char *args_array_t[];
-
-    std::vector<std::string> str_owner;
-    std::unique_ptr<args_array_t> args_array;
-    std::size_t args_size;
-
-public:
-    explicit ArgsToExec(const SimpleCommand &cmd)
-    {
-        const auto &args = cmd.arguments;
-
-        // +1 from program
-        // +1 from NULL terminator
-        this->args_size = args.size() + 2;
-
-        this->args_array = std::make_unique<args_array_t>(this->args_size);
-
-        this->str_owner.reserve(args.size() + 2);
-
-        // Push program first
-        this->str_owner.emplace_back(cmd.program);
-        this->args_array[0] = this->str_owner[0].c_str();
-
-        for (size_t i{}; i < args.size(); ++i)
-        {
-            auto &s = this->str_owner.emplace_back(args[i]);
-            this->args_array[i + 1] = s.c_str();
-        }
-
-        // The args array needs to be null-terminated
-        this->args_array[this->args_size - 1] = nullptr;
-    }
-
-    [[nodiscard]] auto args() const &
-    {
-        return &this->args_array;
-    }
-};
-
-int builtin_cd(const std::vector<std::string_view> &args)
+int builtin_cd(const SimpleCommand &cd)
 {
     fs::path target{};
 
-    if (args.empty() || args[0] == "~")
+    if (cd.arguments.empty() || cd.arguments[0].value == "~")
     {
         const char *home = std::getenv("HOME");
 
@@ -69,9 +27,9 @@ int builtin_cd(const std::vector<std::string_view> &args)
 
         target = home;
     }
-    else if (args.size() == 1)
+    else if (cd.arguments.size() == 1)
     {
-        target = args[0];
+        target = cd.arguments[0].text();
     }
     else
     {
@@ -94,7 +52,7 @@ int builtin_cd(const std::vector<std::string_view> &args)
 
 int builtin_exec(const SimpleCommand &exec)
 {
-    assert(exec.program == "exec");
+    assert(exec.program.text() == "exec");
 
     if (exec.arguments.size() < 1)
     {
@@ -119,7 +77,7 @@ int builtin_exec(const SimpleCommand &exec)
 
 int builtin_exit(const SimpleCommand &exit)
 {
-    assert(exit.program == "exit");
+    assert(exit.program.text() == "exit");
 
     if (exit.arguments.size() > 1)
     {
@@ -131,7 +89,7 @@ int builtin_exit(const SimpleCommand &exit)
 
     if (exit.arguments.size() == 1)
     {
-        std::string tmp{exit.arguments[0]};
+        std::string tmp{exit.arguments[0].text()};
         exit_code = std::atoi(tmp.c_str());
     }
     else

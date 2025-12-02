@@ -46,6 +46,8 @@ struct Token
     size_t start;
     // Equal to the offset + lenght of the token
     size_t end;
+
+    std::string text() const;
 };
 
 struct Specification

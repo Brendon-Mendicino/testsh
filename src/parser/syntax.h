@@ -41,8 +41,9 @@ using Redirect = std::variant<FileRedirect, FdRedirect, CloseFd>;
 
 struct SimpleCommand
 {
-    std::string_view program;
-    std::vector<std::string_view> arguments;
+    Token program;
+    // TODO: this should be Tokens
+    std::vector<Token> arguments;
     std::vector<Redirect> redirections;
 };
 
@@ -151,10 +152,54 @@ public:
 
     void linebreak(Tokenizer &tokenizer) const;
 
-    std::optional<std::string_view> word(Tokenizer &tokenizer) const;
+    std::optional<Token> word(Tokenizer &tokenizer) const;
 
     inline std::optional<Token> token(Tokenizer &tokenizer, const TokenType type) const;
 };
+
+class ArgsToExec
+{
+    typedef const char *args_array_t[];
+
+    std::vector<std::string> str_owner;
+    std::unique_ptr<args_array_t> args_array;
+    std::size_t args_size;
+
+public:
+    explicit ArgsToExec(const SimpleCommand &cmd)
+    {
+        namespace vw = std::ranges::views;
+
+        const auto &args = cmd.arguments;
+
+        // +1 from program
+        // +1 from NULL terminator
+        this->args_size = args.size() + 2;
+
+        this->args_array = std::make_unique<args_array_t>(this->args_size);
+
+        this->str_owner.reserve(args.size() + 2);
+
+        // Push program first
+        this->str_owner.emplace_back(cmd.program.text());
+        this->args_array[0] = this->str_owner[0].c_str();
+
+        for (size_t i{}; i < args.size(); ++i)
+        {
+            auto &s = this->str_owner.emplace_back(args[i].text());
+            this->args_array[i + 1] = s.c_str();
+        }
+
+        // The args array needs to be null-terminated
+        this->args_array[this->args_size - 1] = nullptr;
+    }
+
+    [[nodiscard]] auto args() const &
+    {
+        return &this->args_array;
+    }
+};
+
 
 // ----------------
 // FOMATTING
@@ -268,14 +313,11 @@ struct std::formatter<SimpleCommand> : debug_spec
         {
             const std::string sspaces(this->spaces, ' ');
 
-            std::format_to(
-                ctx.out(),
-                "SimpleCommand(\n{}program={},\n{}arguments={},\n{}redirections=",
-                sspaces,
-                prog.program,
-                sspaces,
-                prog.arguments,
-                sspaces);
+            std::format_to(ctx.out(), "SimpleCommand(\n{}program=", sspaces);
+            this->p_format(prog.program, ctx);
+            std::format_to(ctx.out(), ",\n{}arguments=", sspaces);
+            this->p_format(prog.arguments, ctx);
+            std::format_to(ctx.out(), ",\n{}redirections=", sspaces);
             this->p_format(prog.redirections, ctx);
             return std::format_to(ctx.out(), ")");
         }
@@ -283,7 +325,7 @@ struct std::formatter<SimpleCommand> : debug_spec
         {
             return std::format_to(
                 ctx.out(),
-                "SimpleCommand(program={}, arguments={}, redirections={:?})",
+                "SimpleCommand(program={:?}, arguments={:?}, redirections={:?})",
                 prog.program,
                 prog.arguments,
                 prog.redirections);

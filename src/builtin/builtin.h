@@ -7,7 +7,7 @@
 
 
 // TODO: modify
-int builtin_cd(const std::vector<std::string_view> &args);
+int builtin_cd(const SimpleCommand &cd);
 
 int builtin_exec(const SimpleCommand &exec);
 

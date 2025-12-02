@@ -13,8 +13,16 @@
 #include <cxxabi.h>
 #include <cassert>
 
+// ----------------------------------
+// DEFINES
+// ----------------------------------
+
 // helper function for assertions with message
 #define assertm(exp, msg) assert((void(msg), exp))
+
+// ----------------------------------
+// HELPERS
+// ----------------------------------
 
 // helper type for the visitor
 template <class... Ts>
@@ -32,6 +40,14 @@ constexpr inline optional_ptr<T> make_optptr(Args &&...args)
 {
     return std::optional<std::unique_ptr<T>>{std::make_unique<T>(std::forward<Args>(args)...)};
 }
+
+// ----------------------------------
+// CLASSES
+// ----------------------------------
+
+// ----------------------------------
+// FORMATTING
+// ----------------------------------
 
 // helper for assigning debug format to a std::formatter
 struct debug_spec
@@ -77,12 +93,54 @@ struct debug_spec
     template <typename Formatted>
     auto p_format(const Formatted &p, auto &ctx) const
     {
-        std::formatter<Formatted> fmt;
-        fmt.debug = true;
-        fmt.pretty = true;
-        fmt.spaces = this->spaces + 4;
+        std::formatter<Formatted> fmt{*this};
+        if (this->pretty)
+        {
+            fmt.spaces += 4;
+        }
 
         return fmt.format(p, ctx);
+    }
+
+    template <typename T>
+    auto start(auto &ctx) const
+    {
+        std::format_to(ctx.out(), "{}(", typeid_name<T>());
+        if (this->pretty)
+        {
+            std::format_to(ctx, "\n{}", std::string(this->spaces, ' '));
+        }
+        return ctx;
+    }
+
+    template <typename Formatted>
+    auto field(std::string_view name, const Formatted &p, auto &ctx) const
+    {
+        std::format_to(ctx, "{}=", name);
+
+        this->p_format(p, ctx);
+
+        if (this->pretty)
+        {
+            std::format_to(ctx, ",\n{}", std::string(this->spaces, ' '));
+        }
+        else
+        {
+            std::format_to(ctx, ", ");
+        }
+
+        return ctx;
+    }
+
+    template <typename T>
+    auto finish(auto &ctx) const
+    {
+        if (this->pretty)
+        {
+            std::format_to(ctx.out(), "{}", std::string(this->spaces - 4, ' '));
+        }
+
+        return std::format_to(ctx.out(), ")");
     }
 };
 

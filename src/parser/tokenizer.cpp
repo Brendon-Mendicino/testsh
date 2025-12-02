@@ -3,7 +3,10 @@
 #include <vector>
 #include <format>
 #include <print>
+#include <ranges>
 #include <cassert>
+
+namespace vw = std::ranges::views;
 
 static const std::vector<Specification> specs{
     // Separators
@@ -32,7 +35,8 @@ static const std::vector<Specification> specs{
     {R"(^(\d+)(?:<|>))", TokenType::io_number},
 
     // Word kinds
-    {R"(^([\w\-\/.]+))", TokenType::word},
+    // Match any normal character + any quoted character
+    {R"(^((?:[\w\-\/.]|\\.)+))", TokenType::word},
 
     // Strings
     {R"(^("[^']"))", TokenType::string},
@@ -54,6 +58,24 @@ static const std::vector<Specification> specs{
     // EOF
     {R"(^(\z))", TokenType::eof},
 };
+
+// ------------------------------------
+// Token
+// ------------------------------------
+
+std::string Token::text() const
+{
+    if (type != TokenType::word)
+        return std::string{value};
+
+    std::string retval{};
+    std::ranges::copy(
+        value | vw::filter([](const char c) { return c != '\\'; }),
+        std::back_inserter(retval)
+    );
+
+    return retval;
+}
 
 // ------------------------------------
 // UnbufferedTokenizer

@@ -583,7 +583,7 @@ std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) co
     if (!cmd_word)
         return std::nullopt;
 
-    std::vector<std::string_view> args{};
+    std::vector<Token> args{};
     std::vector<Redirect> redirects{};
 
     while (!tokenizer.next_is_eof())
@@ -591,14 +591,14 @@ std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) co
         auto redirect = this->io_redirect(tokenizer);
         if (redirect)
         {
-            redirects.emplace_back(std::move(*redirect));
+            redirects.emplace_back(*redirect);
             continue;
         }
 
         auto arg = this->word(tokenizer);
         if (arg)
         {
-            args.emplace_back(std::move(*arg));
+            args.emplace_back(*arg);
             continue;
         }
 
@@ -881,7 +881,7 @@ void SyntaxTree::linebreak(Tokenizer &tokenizer) const
     this->newline_list(tokenizer);
 }
 
-std::optional<std::string_view> SyntaxTree::word(Tokenizer &tokenizer) const
+std::optional<Token> SyntaxTree::word(Tokenizer &tokenizer) const
 {
     const auto word = tokenizer.peek();
     if (!word)
@@ -892,7 +892,7 @@ std::optional<std::string_view> SyntaxTree::word(Tokenizer &tokenizer) const
 
     tokenizer.next_token();
 
-    return word->value;
+    return word;
 }
 
 inline std::optional<Token> SyntaxTree::token(Tokenizer &tokenizer, const TokenType type) const
