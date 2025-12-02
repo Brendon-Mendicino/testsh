@@ -38,9 +38,13 @@ enum class TokenType
 
 struct Token
 {
+    // Token type
     TokenType type;
+    // View of the token over the original string
     std::string_view value;
+    // Offset from the start of the string to the beginning of the token
     size_t start;
+    // Equal to the offset + lenght of the token
     size_t end;
 };
 
@@ -94,6 +98,10 @@ public:
 
     std::optional<Token> peek() const;
 };
+
+// ------------------------------------
+// UTILS
+// ------------------------------------
 
 constexpr std::string_view to_string(const TokenType token)
 {

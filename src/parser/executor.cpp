@@ -575,6 +575,50 @@ std::string Executor::process_substitution(const ThisProgram &prog) const
     return substitution;
 }
 
+// TODO: finish
+bool Executor::substitution_run(std::vector<std::string> &support) const
+{
+    // Try and substitute the programs in the support strings
+    Tokenizer process_subs_tok{support};
+
+    // Consume the tokenizer until we reach the opening of substitution command
+    while (auto subs_start = process_subs_tok.peek())
+    {
+        if (subs_start->type == TokenType::eof)
+            return false;
+
+        if (subs_start->type == TokenType::andopen)
+            break;
+
+        process_subs_tok.next_token();
+    }
+
+    Tokenizer closing_tok{process_subs_tok};
+    const auto prog = SyntaxTree().program_substitution(closing_tok);
+    if (!prog)
+        return false;
+
+    // TODO: this part needs to be structured better
+    const Token starting_token = process_subs_tok.next_token().value();
+
+    size_t start_vec = support.size() - process_subs_tok.buffer_size();
+    size_t start_str = starting_token.start;
+
+    // Get the previous state of the tokenizer and get
+    const Token ending_token = closing_tok.prev().value().next_token().value();
+
+    size_t end_vec = support.size() - closing_tok.buffer_size();
+    size_t end_str = ending_token.end;
+
+    // Get the stdout of the child shell
+    const std::string substitution = this->process_substitution(*prog);
+
+    // TODO: for now ignore multilines
+    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
+
+    return true;
+}
+
 std::vector<std::string> Executor::process_input() const
 {
     // Create a support buffer where the line_continuations are cut
@@ -635,7 +679,7 @@ std::vector<std::string> Executor::process_input() const
     const std::string substitution = this->process_substitution(*prog);
 
     // TODO: for now ignore multilines
-    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str + 1);
+    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
 
     return support;
 }
