@@ -7,6 +7,7 @@
 #include <memory>
 #include <unistd.h>
 #include <fcntl.h>
+#include <functional>
 #include <wait.h>
 #include <print>
 #include <cerrno>
@@ -158,6 +159,83 @@ public:
     }
 };
 
+class Spawner
+{
+public:
+    template <typename Fn, typename... Args>
+    static ExecStats spawn(Fn &&fn, Args &&...args)
+    {
+        const pid_t pid = fork();
+        if (pid == -1)
+        {
+            throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
+        }
+
+        if (pid == 0)
+        {
+            // -----------
+            // Child
+            // -----------
+
+            std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+            exit(1);
+        }
+
+        // -----------
+        // Parent
+        // -----------
+
+        int wstatus;
+        pid_t child_wait = waitpid(pid, &wstatus, 0);
+
+        if (child_wait != pid)
+        {
+            throw std::runtime_error(std::format("wait returened an error! retval={} error={}", child_wait, std::strerror(errno)));
+        }
+
+        if (!WIFEXITED(wstatus))
+        {
+            throw std::runtime_error(std::format("Child did not return! error={}", child_wait, std::strerror(errno)));
+        }
+
+        return ExecStats{
+            .exit_code = WEXITSTATUS(wstatus),
+            .child_pid = pid,
+        };
+    }
+
+    template <typename Fn, typename... Args>
+    static ExecStats spawn_async(Fn &&fn, Args &&...args)
+    {
+        const pid_t pid = fork();
+        if (pid == -1)
+        {
+            throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
+        }
+
+        if (pid == 0)
+        {
+            // -----------
+            // Child
+            // -----------
+
+            std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
+            exit(1);
+        }
+
+        // -----------
+        // Parent
+        // -----------
+
+        // Don't wait for the child
+
+        return ExecStats{
+            .exit_code = 0,
+            .child_pid = pid,
+        };
+    }
+};
+
 /**
  * @brief Create a pipe object
  *
@@ -224,18 +302,8 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
     if (builtin_run)
         return *builtin_run;
 
-    const pid_t pid = fork();
-    if (pid == -1)
+    auto child = [&]()
     {
-        throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
-    }
-
-    if (pid == 0)
-    {
-        // -----------
-        // Child
-        // -----------
-
         if (!redirect.apply_redirections())
             exit(1);
 
@@ -244,28 +312,9 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
 
         execvp(args_to_pass[0], (char *const *)args_to_pass);
         exit(1);
-    }
-
-    // -----------
-    // Parent
-    // -----------
-
-    if (state.inside_pipeline)
-    {
-        // TODO: mofiy this logic
-        // Don't wait for the child
-        return {.child_pid = pid};
-    }
-
-    int child_status;
-    pid_t child_wait = waitpid(pid, &child_status, 0);
-    if (child_wait != pid)
-        throw std::runtime_error(std::format("The wait returened an error! retval={}", child_wait));
-
-    return ExecStats{
-        .exit_code = WEXITSTATUS(child_status),
-        .child_pid = pid,
     };
+
+    return Spawner::spawn(child);
 }
 
 ExecStats Executor::and_list(const AndList &and_list) const
@@ -315,14 +364,38 @@ ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state
         left_state.redirects.emplace_back(STDIN_FILENO, reader_fd);
         left_state.fd_to_close.emplace_back(writer_fd);
 
-        this->pipeline(**pipeline.left, {.inside_pipeline = true, .redirects = {{STDOUT_FILENO, writer_fd}}, .fd_to_close = {reader_fd}});
+        this->pipeline(**pipeline.left, {.redirects = {{STDOUT_FILENO, writer_fd}}, .fd_to_close = {reader_fd}});
     }
 
-    auto retval = this->command(*pipeline.right, left_state);
+    ExecStats retval;
 
-    if (pipeline.negated)
+    // We are inside a pipeline execution
+    if (state.initialized())
     {
-        retval.exit_code = (retval.exit_code != 0) ? 0 : 1;
+        auto async_child = [&]()
+        {
+            this->command(*pipeline.right, left_state);
+            // Close leftover fds
+            for (const auto &fd : left_state.fd_to_close)
+            {
+                close(fd);
+            }
+        };
+
+        retval = Spawner::spawn_async(async_child);
+
+        // Close leftover fds
+        // The fds will be closed when the destructor runs
+        RedirectController fd_releaser{left_state};
+    }
+    else
+    {
+        retval = this->command(*pipeline.right, left_state);
+
+        if (pipeline.negated)
+        {
+            retval.exit_code = (retval.exit_code != 0) ? 0 : 1;
+        }
     }
 
     return retval;
@@ -381,48 +454,16 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
         return {.exit_code = 1};
     }
 
-    pid_t pid = fork();
-    if (pid == -1)
+    auto subshell_call = [&]()
     {
-        throw std::runtime_error(std::string("fork failed: ") + std::strerror(errno));
-    }
-
-    if (pid == 0)
-    {
-        // -----------
-        // Child
-        // -----------
-
         if (!redirect.apply_redirections())
             exit(1);
 
         const auto child_status = this->sequential_list(*subshell.seq_list);
         exit(child_status.exit_code);
-    }
-
-    // -----------
-    // Parent
-    // -----------
-
-    if (state.inside_pipeline)
-    {
-        // TODO: mofiy this logic
-        // Don't wait for the child
-        return {.child_pid = pid};
-    }
-
-    int wstatus{};
-    waitpid(pid, &wstatus, 0);
-
-    if (!WIFEXITED(wstatus))
-    {
-        throw std::runtime_error("Child did not return!");
-    }
-
-    return {
-        .exit_code = WEXITSTATUS(wstatus),
-        .child_pid = pid,
     };
+
+    return Spawner::spawn(subshell_call);
 }
 
 ExecStats Executor::program(const ThisProgram &program) const

@@ -59,7 +59,9 @@ template <IsTokenizer Tok>
 std::optional<CmdSubstitution> SyntaxTree<Tok>::list_substitution(Tok &tokenizer) const
 {
     CmdSubstitution retval{};
-    ssize_t open_parens{};
+    // TODO: decide if I want subshell to be opened outside of
+    // substitutions
+    // ssize_t open_parens{};
 
     for (;;)
     {

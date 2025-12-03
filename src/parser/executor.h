@@ -22,9 +22,11 @@ struct ExecStats
 
 struct CommandState
 {
-    bool inside_pipeline;
     std::vector<std::tuple<int, int>> redirects;
     std::vector<int> fd_to_close;
+
+    bool initialized() const
+    { return !redirects.empty(); }
 };
 
 class Executor
