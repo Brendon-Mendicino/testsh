@@ -38,9 +38,9 @@ static const std::vector<Specification> specs{
     // Match any normal character + any quoted character
     {R"(^((?:[\w\-\/.]|\\.)+))", TokenType::word},
 
-    // Strings
-    {R"(^("[^']"))", TokenType::string},
-    {R"(^('[^']'))", TokenType::string},
+    // Quoatations
+    {R"(^('[^']*'))", TokenType::quoted_word},
+    // {R"(^("[^']"))", TokenType::string},
 
     // Bang
     {R"(^(!))", TokenType::bang},

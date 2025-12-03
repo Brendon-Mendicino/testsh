@@ -12,7 +12,7 @@
 enum class TokenType
 {
     word,
-    string,
+    quoted_word,
     separator,
     new_line,
     semicolon,
@@ -113,8 +113,8 @@ constexpr std::string_view to_string(const TokenType token)
         return "word";
     case TokenType::separator:
         return "separator";
-    case TokenType::string:
-        return "string";
+    case TokenType::quoted_word:
+        return "quoted_word";
     case TokenType::new_line:
         return "new_line";
     case TokenType::semicolon:

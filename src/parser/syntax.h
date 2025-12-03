@@ -95,6 +95,16 @@ struct ThisProgram
     optional_ptr<CompleteCommands> child;
 };
 
+struct CmdSubstitution;
+using InnerSubstitution = std::variant<CmdSubstitution, ThisProgram, Token>;
+
+struct CmdSubstitution
+{
+    Token start;
+    Token end;
+    std::vector<InnerSubstitution> child;
+};
+
 // ---------------------------
 // SyntaxTree
 // ---------------------------
@@ -110,7 +120,11 @@ class SyntaxTree
     inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
 
 public:
-    std::optional<ThisProgram> program_substitution(Tokenizer &tokenizer) const;
+    std::optional<CmdSubstitution> cmd_substitution(Tokenizer &tokenizer) const;
+
+    std::optional<CmdSubstitution> list_substitution(Tokenizer &tokenizer) const;
+
+    std::optional<CmdSubstitution> simple_substitution(Tokenizer &tokenizer) const;
 
     std::optional<ThisProgram> program(Tokenizer &tokenizer) const;
 
@@ -310,6 +324,19 @@ struct std::formatter<T> : debug_spec
         this->start<T>(ctx);
         this->field("left", node.left, ctx);
         this->field("right", node.right, ctx);
+        return this->finish(ctx);
+    }
+};
+
+template <>
+struct std::formatter<CmdSubstitution> : debug_spec
+{
+    auto format(const CmdSubstitution &subs, auto &ctx) const
+    {
+        this->start<CmdSubstitution>(ctx);
+        this->field("start", subs.start, ctx);
+        this->field("end", subs.end, ctx);
+        this->field("child", subs.child, ctx);
         return this->finish(ctx);
     }
 };

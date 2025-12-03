@@ -30,16 +30,103 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
 
 /**
  * BNF:
- * 
+ *
  * ```
- * program_substitution ::= ANDOPEN program CLOSE_ROUND
- *                        ;
+ * cmd_substitution ::= ANDOPEN list_substitution CLOSE_ROUND
+ *                    ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<ThisProgram> 
+ *
+ * @param tokenizer
+ * @return std::optional<ThisProgram>
  */
-std::optional<ThisProgram> SyntaxTree::program_substitution(Tokenizer &tokenizer) const
+std::optional<CmdSubstitution> SyntaxTree::cmd_substitution(Tokenizer &tokenizer) const
+{
+    Tokenizer sub_tokenizer{tokenizer};
+
+    const auto and_open = this->token(sub_tokenizer, TokenType::andopen);
+    if (!and_open)
+        return std::nullopt;
+
+    auto list = this->list_substitution(sub_tokenizer);
+    if (!list)
+        return std::nullopt;
+
+    const auto close_round = this->token(sub_tokenizer, TokenType::close_round);
+    // TODO: error handling: print "missing closing paren"
+    if (!close_round)
+        return std::nullopt;
+
+    tokenizer = sub_tokenizer;
+    list->start = *and_open;
+    list->end = *close_round;
+
+    return list;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * list_substitution ::=                   simple_substitution
+ *                     |                   cmd_substitution
+ *                     |                   TOKEN
+ *                     | list_substitution simple_substitution
+ *                     | list_substitution cmd_substitution
+ *                     | list_substitution TOKEN
+ *                     ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<CmdSubstitution>
+ */
+std::optional<CmdSubstitution> SyntaxTree::list_substitution(Tokenizer &tokenizer) const
+{
+    CmdSubstitution retval{};
+    ssize_t open_parens{};
+
+    for (;;)
+    {
+        auto simple = this->simple_substitution(tokenizer);
+        if (simple)
+        {
+            retval.child.emplace_back(std::move(*simple));
+            continue;
+        }
+
+        auto subs = this->cmd_substitution(tokenizer);
+        if (subs)
+        {
+            retval.child.emplace_back(std::move(*subs));
+            continue;
+        }
+
+        auto token = tokenizer.peek();
+        if (token && token->type != TokenType::eof && token->type != TokenType::close_round)
+        {
+            retval.child.emplace_back(std::move(*token));
+            tokenizer.next_token();
+            continue;
+        }
+
+        break;
+    }
+
+    return retval;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * simple_substitution ::= ANDOPEN         CLOSE_ROUND
+ *                       | ANDOPEN program CLOSE_ROUND
+ *                       ;
+ * ```
+ *
+ * @param tokenizer
+ * @return std::optional<ThisProgram>
+ */
+std::optional<CmdSubstitution> SyntaxTree::simple_substitution(Tokenizer &tokenizer) const
 {
     Tokenizer sub_tokenizer{tokenizer};
 
@@ -57,11 +144,15 @@ std::optional<ThisProgram> SyntaxTree::program_substitution(Tokenizer &tokenizer
         return std::nullopt;
 
     tokenizer = sub_tokenizer;
+    std::vector<InnerSubstitution> child;
+    child.emplace_back(std::move(*program));
 
-    return program;
+    return CmdSubstitution{
+        .start = *and_open,
+        .end = *close_round,
+        .child = std::move(child),
+    };
 }
-
-
 
 /**
  * BNF:
@@ -88,7 +179,7 @@ std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer) const
     }
 
     auto complete_commands = this->complete_commands(sub_tokenizer);
-    if (!complete_commands.has_value())
+    if (!complete_commands || complete_commands->empty())
         return std::nullopt;
 
     this->linebreak(sub_tokenizer);
@@ -468,15 +559,15 @@ std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
  * compound_list ::= linebreak term
  *                 | linebreak term separator
  *                 ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<SequentialList> 
+ *
+ * @param tokenizer
+ * @return std::optional<SequentialList>
  */
 std::optional<SequentialList> SyntaxTree::compound_list(Tokenizer &tokenizer) const
 {
@@ -497,15 +588,15 @@ std::optional<SequentialList> SyntaxTree::compound_list(Tokenizer &tokenizer) co
 
 /**
  * BNF:
- * 
+ *
  * ```
  * term ::= term separator and_or
  *        |                and_or
  *        ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<OpList> 
+ *
+ * @param tokenizer
+ * @return std::optional<OpList>
  */
 std::optional<SequentialList> SyntaxTree::term(Tokenizer &tokenizer) const
 {
@@ -830,15 +921,15 @@ std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
  * newline_list ::=              NEWLINE
  *                | newline_list NEWLINE
  *                ;
  * ```
- * 
- * @param tokenizer 
- * @return std::optional<std::string_view> 
+ *
+ * @param tokenizer
+ * @return std::optional<std::string_view>
  */
 bool SyntaxTree::newline_list(Tokenizer &tokenizer) const
 {
@@ -865,16 +956,16 @@ bool SyntaxTree::newline_list(Tokenizer &tokenizer) const
 
 /**
  * BNF:
- * 
+ *
  * ```
  * linebreak ::= newline_list
  *             | EMPTY
  *             ;
  * ```
- * 
- * @param tokenizer 
- * @return true 
- * @return false 
+ *
+ * @param tokenizer
+ * @return true
+ * @return false
  */
 void SyntaxTree::linebreak(Tokenizer &tokenizer) const
 {
