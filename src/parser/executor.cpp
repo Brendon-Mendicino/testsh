@@ -584,6 +584,8 @@ std::string Executor::cmd_substitution(const CmdSubstitution &cmd) const
 
     // Process all the tokens
     auto upper_command = SyntaxTree<TokenIter>().program(token_stream);
+
+    // TODO: error handling
     if (!upper_command)
         throw std::runtime_error("Failed to parse command substitution");
 
@@ -596,7 +598,93 @@ std::string Executor::cmd_substitution(const CmdSubstitution &cmd) const
         .prog = std::move(*upper_command),
     });
 
-    return subs;
+    return "'" + subs + "'";
+}
+
+void Executor::substitution_run(std::vector<std::string> &support) const
+{
+    using Sub = std::tuple<size_t, size_t, size_t, size_t, std::string>;
+
+    // Kees the substitution in a vecotr, then apply them to the support
+    // vector. The reason for this is that, if the support strings where
+    // changed while the iteration takes place, the references inside the
+    // tokenizer to the strings in the support vecotr, whould be invalidated
+    // creating references to garbage memory.
+    std::vector<Sub> subs;
+
+    // Try and substitute the programs in the support strings
+    Tokenizer process_subs_tok{support};
+
+    while (!process_subs_tok.next_is_eof())
+    {
+        bool parse_substitution = false;
+
+        // Consume the tokenizer until we reach the opening of substitution command
+        while (auto subs_start = process_subs_tok.peek())
+        {
+            if (subs_start->type == TokenType::eof)
+                break;
+
+            if (subs_start->type == TokenType::andopen)
+            {
+                parse_substitution = true;
+                break;
+            }
+
+            process_subs_tok.next_token();
+        }
+
+        if (!parse_substitution)
+            break;
+
+        Tokenizer closing_tok{process_subs_tok};
+        const auto cmd = SyntaxTree<Tokenizer>().cmd_substitution(closing_tok);
+        // TODO: error handling
+        if (!cmd)
+            throw std::runtime_error("could not parse command substitution");
+
+        std::println(stderr, "=== CMD SUBSTITUION ===");
+        std::println(stderr, "{:#?}", cmd);
+
+        // TODO: this part needs to be structured better
+        const Token starting_token = process_subs_tok.next_token().value();
+
+        size_t start_vec = support.size() - process_subs_tok.buffer_size();
+        size_t start_str = starting_token.start;
+
+        // Get the previous state of the tokenizer and get
+        const Token ending_token = closing_tok.prev().value().next_token().value();
+
+        size_t end_vec = support.size() - closing_tok.buffer_size();
+        size_t end_str = ending_token.end;
+
+        // Get the stdout of the child shell
+        std::string substitution = this->cmd_substitution(*cmd);
+
+        subs.emplace_back(start_vec, start_str, end_vec, end_str, std::move(substitution));
+
+        // Commit advancement to the tokenizer
+        process_subs_tok = closing_tok;
+    }
+
+    size_t offset{};
+
+    // Apply substitutions
+    for (auto sub : subs)
+    {
+        auto [start_vec, start_str, end_vec, end_str, substitution] = sub;
+
+        start_str += offset;
+        end_str += offset;
+
+        // TODO: handle multilines later
+        support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
+
+        offset += (substitution.size()) - (end_str - start_str);
+    }
+
+    std::println(stderr, "=== AFTER SUBS ===");
+    std::println(stderr, "{:#?}", support);
 }
 
 std::vector<std::string> Executor::process_input() const
@@ -623,45 +711,7 @@ std::vector<std::string> Executor::process_input() const
             support.emplace_back(line);
     }
 
-    // Try and substitute the programs in the support strings
-    Tokenizer process_subs_tok{support};
-
-    // Consume the tokenizer until we reach the opening of substitution command
-    while (auto subs_start = process_subs_tok.peek())
-    {
-        if (subs_start->type == TokenType::eof)
-            return support;
-
-        if (subs_start->type == TokenType::andopen)
-            break;
-
-        process_subs_tok.next_token();
-    }
-
-    Tokenizer closing_tok{process_subs_tok};
-    const auto cmd = SyntaxTree<Tokenizer>().cmd_substitution(closing_tok);
-    if (!cmd)
-        return support;
-
-    std::println(stderr, "=== CMD SUBSTITUION ===");
-    std::println(stderr, "{:#?}", cmd);
-
-    // TODO: this part needs to be structured better
-    const Token starting_token = process_subs_tok.next_token().value();
-
-    size_t start_vec = support.size() - process_subs_tok.buffer_size();
-    size_t start_str = starting_token.start;
-
-    // Get the previous state of the tokenizer and get
-    const Token ending_token = closing_tok.prev().value().next_token().value();
-
-    size_t end_vec = support.size() - closing_tok.buffer_size();
-    size_t end_str = ending_token.end;
-
-    // Get the stdout of the child shell
-    const std::string substitution = this->cmd_substitution(*cmd);
-
-    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
+    this->substitution_run(support);
 
     return support;
 }

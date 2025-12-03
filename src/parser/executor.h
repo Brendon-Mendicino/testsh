@@ -47,7 +47,7 @@ class Executor
     bool read_stdin();
     std::string simple_substitution(const SimpleSubstitution &prog) const;
     std::string cmd_substitution(const CmdSubstitution &cmd) const;
-    bool substitution_run(std::vector<std::string> &support) const;
+    void substitution_run(std::vector<std::string> &support) const;
     std::vector<std::string> process_input() const;
     ExecStats execute() const;
 
