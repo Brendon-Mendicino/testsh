@@ -1028,3 +1028,4 @@ inline std::optional<Token> SyntaxTree<Tok>::token(Tok &tokenizer, const TokenTy
 
 template class SyntaxTree<Tokenizer>;
 template class SyntaxTree<UnbufferedTokenizer>;
+template class SyntaxTree<TokenIter>;

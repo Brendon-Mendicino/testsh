@@ -101,6 +101,20 @@ public:
     std::optional<Token> peek() const;
 };
 
+class TokenIter
+{
+    std::span<Token> tokens;
+
+public:
+    TokenIter(std::span<Token> tokens);
+
+    std::optional<Token> next_token();
+
+    bool next_is_eof() const;
+
+    std::optional<Token> peek() const;
+};
+
 // ------------------------------------
 // UTILS
 // ------------------------------------

@@ -204,3 +204,31 @@ std::optional<Token> Tokenizer::peek() const
 
     return copy.next_token();
 }
+
+// ------------------------------------
+// TokenIter
+// ------------------------------------
+
+TokenIter::TokenIter(std::span<Token> tokens) : tokens(tokens) {}
+
+std::optional<Token> TokenIter::next_token()
+{
+    if (this->tokens.empty())
+        return std::nullopt;
+
+    const Token token = this->tokens.front();
+
+    this->tokens = this->tokens.subspan(1);
+
+    return token;
+}
+
+bool TokenIter::next_is_eof() const
+{
+    return this->tokens.empty();
+}
+
+std::optional<Token> TokenIter::peek() const
+{
+    return this->tokens.front();
+}
