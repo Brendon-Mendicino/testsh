@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <cxxabi.h>
 #include <cassert>
+#include <concepts>
 
 // ----------------------------------
 // DEFINES
@@ -52,8 +53,25 @@ concept HasFormatter =
     };
 
 struct debug_spec;
+
 template <typename T, typename CharT = char>
 concept HasDebugFormatter = std::derived_from<std::formatter<T, CharT>, debug_spec>;
+
+struct Token;
+
+template <typename T>
+concept IsTokenizer =
+    std::copyable<T> &&
+    std::movable<T> &&
+
+    requires(const T t) {
+        { t.next_is_eof() } -> std::same_as<bool>;
+        { t.peek() } -> std::same_as<std::optional<Token>>;
+    } &&
+
+    requires(T t2) {
+        { t2.next_token() } -> std::same_as<std::optional<Token>>;
+    };
 
 template <typename T>
 inline std::string typeid_name()
@@ -132,12 +150,14 @@ struct debug_spec
         return fmt.format(p, ctx);
     }
 
+    // Print the start of the class
     template <typename T>
     auto start(auto &ctx) const
     {
         return std::format_to(ctx.out(), "{}(", typeid_name<T>());
     }
 
+    // Print a field that is not backed by debug_spec
     template <typename Field>
     auto field(std::string_view name, const Field &p, auto &ctx) const
     {
@@ -161,6 +181,7 @@ struct debug_spec
         return ctx.out();
     }
 
+    // Print a field that is backed by debug_spec
     template <typename Field>
         requires HasDebugFormatter<Field>
     auto field(std::string_view name, const Field &p, auto &ctx) const
@@ -187,6 +208,7 @@ struct debug_spec
         return ctx.out();
     }
 
+    // Print the end of the class
     auto finish(auto &ctx) const
     {
         if (this->pretty)
@@ -275,7 +297,6 @@ struct std::formatter<std::vector<T>, CharT> : debug_spec
         {
             std::format_to(out, "\n{}", std::string(this->spaces - 4, ' '));
         }
-
 
         *out++ = ']';
         return out;

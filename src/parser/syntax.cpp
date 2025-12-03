@@ -14,10 +14,11 @@
  * @param fn
  * @return std::optional<VariantType>
  */
+template <IsTokenizer Tok>
 template <typename VariantType, typename Fn>
-inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn) const
+inline std::optional<VariantType> SyntaxTree<Tok>::check(Tok &tokenizer, Fn fn) const
 {
-    Tokenizer sub_tok{tokenizer};
+    Tok sub_tok{tokenizer};
 
     if (auto list = (this->*fn)(sub_tok))
     {
@@ -39,9 +40,10 @@ inline std::optional<VariantType> SyntaxTree::check(Tokenizer &tokenizer, Fn fn)
  * @param tokenizer
  * @return std::optional<ThisProgram>
  */
-std::optional<CmdSubstitution> SyntaxTree::cmd_substitution(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<CmdSubstitution> SyntaxTree<Tok>::cmd_substitution(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
 
     const auto and_open = this->token(sub_tokenizer, TokenType::andopen);
     if (!and_open)
@@ -79,7 +81,8 @@ std::optional<CmdSubstitution> SyntaxTree::cmd_substitution(Tokenizer &tokenizer
  * @param tokenizer
  * @return std::optional<CmdSubstitution>
  */
-std::optional<CmdSubstitution> SyntaxTree::list_substitution(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<CmdSubstitution> SyntaxTree<Tok>::list_substitution(Tok &tokenizer) const
 {
     CmdSubstitution retval{};
     ssize_t open_parens{};
@@ -126,9 +129,10 @@ std::optional<CmdSubstitution> SyntaxTree::list_substitution(Tokenizer &tokenize
  * @param tokenizer
  * @return std::optional<ThisProgram>
  */
-std::optional<CmdSubstitution> SyntaxTree::simple_substitution(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<CmdSubstitution> SyntaxTree<Tok>::simple_substitution(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
 
     const auto and_open = this->token(sub_tokenizer, TokenType::andopen);
     if (!and_open)
@@ -166,9 +170,10 @@ std::optional<CmdSubstitution> SyntaxTree::simple_substitution(Tokenizer &tokeni
  * @param tokenizer
  * @return std::optional<ThisProgram>
  */
-std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<ThisProgram> SyntaxTree<Tok>::program(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
 
     this->linebreak(sub_tokenizer);
 
@@ -203,7 +208,8 @@ std::optional<ThisProgram> SyntaxTree::program(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<CompleteCommands>
  */
-std::optional<CompleteCommands> SyntaxTree::complete_commands(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<CompleteCommands> SyntaxTree<Tok>::complete_commands(Tok &tokenizer) const
 {
     CompleteCommands complete_commands;
 
@@ -230,7 +236,8 @@ std::optional<CompleteCommands> SyntaxTree::complete_commands(Tokenizer &tokeniz
  * @param tokenizer
  * @return std::optional<SequentialList>
  */
-std::optional<SequentialList> SyntaxTree::complete_command(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<SequentialList> SyntaxTree<Tok>::complete_command(Tok &tokenizer) const
 {
     auto list = this->list(tokenizer);
     if (!list.has_value())
@@ -256,7 +263,8 @@ std::optional<SequentialList> SyntaxTree::complete_command(Tokenizer &tokenizer)
  * @param tokenizer
  * @return std::optional<SequentialList>
  */
-std::optional<SequentialList> SyntaxTree::list(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<SequentialList> SyntaxTree<Tok>::list(Tok &tokenizer) const
 {
     SequentialList retval{};
 
@@ -270,7 +278,7 @@ std::optional<SequentialList> SyntaxTree::list(Tokenizer &tokenizer) const
     for (;;)
     {
         // If the next token is not what we expect don't advance the tokenizer sequence
-        Tokenizer sub_token{tokenizer};
+        Tok sub_token{tokenizer};
 
         const auto semi = this->token(sub_token, TokenType::semicolon);
         if (!semi)
@@ -310,7 +318,8 @@ std::optional<SequentialList> SyntaxTree::list(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<OpList>
  */
-std::optional<OpList> SyntaxTree::and_or(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<OpList> SyntaxTree<Tok>::and_or(Tok &tokenizer) const
 {
     auto pipeline = this->pipeline(tokenizer);
     if (!pipeline)
@@ -323,7 +332,7 @@ std::optional<OpList> SyntaxTree::and_or(Tokenizer &tokenizer) const
         // Duplicate the tokenizer. By duplicating, if the parsing
         // fails, the advancements are not committed to the original
         // tokenizer.
-        Tokenizer sub_tok{tokenizer};
+        Tok sub_tok{tokenizer};
 
         auto next_token = sub_tok.next_token();
         if (!next_token)
@@ -389,7 +398,8 @@ std::optional<OpList> SyntaxTree::and_or(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<Pipeline>
  */
-std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Pipeline> SyntaxTree<Tok>::pipeline(Tok &tokenizer) const
 {
     bool has_bang = false;
 
@@ -420,7 +430,8 @@ std::optional<Pipeline> SyntaxTree::pipeline(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<Pipeline>
  */
-std::optional<Pipeline> SyntaxTree::pipe_sequence(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Pipeline> SyntaxTree<Tok>::pipe_sequence(Tok &tokenizer) const
 {
     Pipeline retval{};
 
@@ -434,7 +445,7 @@ std::optional<Pipeline> SyntaxTree::pipe_sequence(Tokenizer &tokenizer) const
     for (;;)
     {
         // If the next token is not what we expect don't advance the tokenizer sequence
-        Tokenizer sub_token{tokenizer};
+        Tok sub_token{tokenizer};
 
         const auto pipe = this->token(sub_token, TokenType::pipe);
         if (!pipe)
@@ -475,12 +486,13 @@ std::optional<Pipeline> SyntaxTree::pipe_sequence(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<Command>
  */
-std::optional<Command> SyntaxTree::command(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Command> SyntaxTree<Tok>::command(Tok &tokenizer) const
 {
-    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree::simple_command))
+    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree<Tok>::simple_command))
         return syn_words;
 
-    Tokenizer subshell_tok{tokenizer};
+    Tok subshell_tok{tokenizer};
     auto subshell = this->compound_command(subshell_tok);
     if (subshell)
     {
@@ -516,7 +528,8 @@ std::optional<Command> SyntaxTree::command(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<Command>
  */
-std::optional<Subshell> SyntaxTree::compound_command(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Subshell> SyntaxTree<Tok>::compound_command(Tok &tokenizer) const
 {
     // TODO: modify return value with appropriate variant
     return this->subshell(tokenizer);
@@ -533,9 +546,10 @@ std::optional<Subshell> SyntaxTree::compound_command(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<Subshell>
  */
-std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Subshell> SyntaxTree<Tok>::subshell(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
 
     const auto open_round = this->token(sub_tokenizer, TokenType::open_round);
     if (!open_round)
@@ -569,9 +583,10 @@ std::optional<Subshell> SyntaxTree::subshell(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<SequentialList>
  */
-std::optional<SequentialList> SyntaxTree::compound_list(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<SequentialList> SyntaxTree<Tok>::compound_list(Tok &tokenizer) const
 {
-    Tokenizer sub_tok{tokenizer};
+    Tok sub_tok{tokenizer};
 
     this->linebreak(sub_tok);
 
@@ -598,7 +613,8 @@ std::optional<SequentialList> SyntaxTree::compound_list(Tokenizer &tokenizer) co
  * @param tokenizer
  * @return std::optional<OpList>
  */
-std::optional<SequentialList> SyntaxTree::term(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<SequentialList> SyntaxTree<Tok>::term(Tok &tokenizer) const
 {
     SequentialList retval{};
 
@@ -612,7 +628,7 @@ std::optional<SequentialList> SyntaxTree::term(Tokenizer &tokenizer) const
     for (;;)
     {
         // If the next token is not what we expect don't advance the tokenizer sequence
-        Tokenizer sub_token{tokenizer};
+        Tok sub_token{tokenizer};
 
         const auto semi = this->token(sub_token, TokenType::semicolon);
         if (!semi)
@@ -668,7 +684,8 @@ std::optional<SequentialList> SyntaxTree::term(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<SimpleCommand>
  */
-std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<SimpleCommand> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const
 {
     const auto cmd_word = this->word(tokenizer);
     if (!cmd_word)
@@ -715,9 +732,10 @@ std::optional<SimpleCommand> SyntaxTree::simple_command(Tokenizer &tokenizer) co
  * @param tokenizer
  * @return std::optional<std::vector<Redirect>>
  */
-std::optional<std::vector<Redirect>> SyntaxTree::redirect_list(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<std::vector<Redirect>> SyntaxTree<Tok>::redirect_list(Tok &tokenizer) const
 {
-    Tokenizer io_tokenizer{tokenizer};
+    Tok io_tokenizer{tokenizer};
 
     auto first_redirect = this->io_redirect(io_tokenizer);
     if (!first_redirect)
@@ -754,9 +772,10 @@ std::optional<std::vector<Redirect>> SyntaxTree::redirect_list(Tokenizer &tokeni
  * @param tokenizer
  * @return std::optional<Redirect>
  */
-std::optional<Redirect> SyntaxTree::io_redirect(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Redirect> SyntaxTree<Tok>::io_redirect(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
     std::optional<int> new_redirect_fd;
 
     const auto io_number = sub_tokenizer.peek();
@@ -839,9 +858,10 @@ static Redirect convert_and_redirect(const int default_fd, const std::string_vie
  * @param tokenizer
  * @return std::optional<Redirect>
  */
-std::optional<Redirect> SyntaxTree::io_file(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Redirect> SyntaxTree<Tok>::io_file(Tok &tokenizer) const
 {
-    Tokenizer sub_tokenizer{tokenizer};
+    Tok sub_tokenizer{tokenizer};
 
     const auto redirect_token = sub_tokenizer.next_token();
     if (!redirect_token.has_value())
@@ -889,7 +909,8 @@ std::optional<Redirect> SyntaxTree::io_file(Tokenizer &tokenizer) const
     return redirect;
 }
 
-std::optional<Redirect> SyntaxTree::io_here(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Redirect> SyntaxTree<Tok>::io_here(Tok &tokenizer) const
 {
     throw std::runtime_error("Not implemented");
 }
@@ -905,7 +926,8 @@ std::optional<Redirect> SyntaxTree::io_here(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<std::string>
  */
-std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<std::string_view> SyntaxTree<Tok>::filename(Tok &tokenizer) const
 {
     const auto word = tokenizer.peek();
     if (!word.has_value())
@@ -931,7 +953,8 @@ std::optional<std::string_view> SyntaxTree::filename(Tokenizer &tokenizer) const
  * @param tokenizer
  * @return std::optional<std::string_view>
  */
-bool SyntaxTree::newline_list(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+bool SyntaxTree<Tok>::newline_list(Tok &tokenizer) const
 {
     const auto newline = tokenizer.peek();
     if (!newline)
@@ -967,12 +990,14 @@ bool SyntaxTree::newline_list(Tokenizer &tokenizer) const
  * @return true
  * @return false
  */
-void SyntaxTree::linebreak(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+void SyntaxTree<Tok>::linebreak(Tok &tokenizer) const
 {
     this->newline_list(tokenizer);
 }
 
-std::optional<Token> SyntaxTree::word(Tokenizer &tokenizer) const
+template <IsTokenizer Tok>
+std::optional<Token> SyntaxTree<Tok>::word(Tok &tokenizer) const
 {
     const auto word = tokenizer.peek();
     if (!word)
@@ -986,7 +1011,8 @@ std::optional<Token> SyntaxTree::word(Tokenizer &tokenizer) const
     return word;
 }
 
-inline std::optional<Token> SyntaxTree::token(Tokenizer &tokenizer, const TokenType type) const
+template <IsTokenizer Tok>
+inline std::optional<Token> SyntaxTree<Tok>::token(Tok &tokenizer, const TokenType type) const
 {
     auto token = tokenizer.peek();
     if (!token || token->type != type)
@@ -995,3 +1021,10 @@ inline std::optional<Token> SyntaxTree::token(Tokenizer &tokenizer, const TokenT
     tokenizer.next_token();
     return token;
 }
+
+// ------------------------------------
+// TEMPLATE INSTATIATION
+// ------------------------------------
+
+template class SyntaxTree<Tokenizer>;
+template class SyntaxTree<UnbufferedTokenizer>;

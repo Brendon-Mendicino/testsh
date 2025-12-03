@@ -113,62 +113,64 @@ struct CmdSubstitution
  * @brief You can read the full bash syntax BNF at
  * https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_10
  *
+ * Remember to add the definitions of new methods in syntax-impl.cpp.
  */
+template <IsTokenizer Tok>
 class SyntaxTree
 {
     template <typename VariantType, typename Fn>
-    inline std::optional<VariantType> check(Tokenizer &tokenizer, Fn fn) const;
+    inline std::optional<VariantType> check(Tok &tokenizer, Fn fn) const;
 
 public:
-    std::optional<CmdSubstitution> cmd_substitution(Tokenizer &tokenizer) const;
+    std::optional<CmdSubstitution> cmd_substitution(Tok &tokenizer) const;
 
-    std::optional<CmdSubstitution> list_substitution(Tokenizer &tokenizer) const;
+    std::optional<CmdSubstitution> list_substitution(Tok &tokenizer) const;
 
-    std::optional<CmdSubstitution> simple_substitution(Tokenizer &tokenizer) const;
+    std::optional<CmdSubstitution> simple_substitution(Tok &tokenizer) const;
 
-    std::optional<ThisProgram> program(Tokenizer &tokenizer) const;
+    std::optional<ThisProgram> program(Tok &tokenizer) const;
 
-    std::optional<CompleteCommands> complete_commands(Tokenizer &tokenizer) const;
+    std::optional<CompleteCommands> complete_commands(Tok &tokenizer) const;
 
-    std::optional<SequentialList> complete_command(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> complete_command(Tok &tokenizer) const;
 
-    std::optional<SequentialList> list(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> list(Tok &tokenizer) const;
 
-    std::optional<OpList> and_or(Tokenizer &tokenizer) const;
+    std::optional<OpList> and_or(Tok &tokenizer) const;
 
-    std::optional<Pipeline> pipeline(Tokenizer &tokenizer) const;
+    std::optional<Pipeline> pipeline(Tok &tokenizer) const;
 
-    std::optional<Pipeline> pipe_sequence(Tokenizer &tokenizer) const;
+    std::optional<Pipeline> pipe_sequence(Tok &tokenizer) const;
 
-    std::optional<Command> command(Tokenizer &tokenizer) const;
+    std::optional<Command> command(Tok &tokenizer) const;
 
-    std::optional<Subshell> compound_command(Tokenizer &tokenizer) const;
+    std::optional<Subshell> compound_command(Tok &tokenizer) const;
 
-    std::optional<Subshell> subshell(Tokenizer &tokenizer) const;
+    std::optional<Subshell> subshell(Tok &tokenizer) const;
 
-    std::optional<SequentialList> compound_list(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> compound_list(Tok &tokenizer) const;
 
-    std::optional<SequentialList> term(Tokenizer &tokenizer) const;
+    std::optional<SequentialList> term(Tok &tokenizer) const;
 
-    std::optional<SimpleCommand> simple_command(Tokenizer &tokenizer) const;
+    std::optional<SimpleCommand> simple_command(Tok &tokenizer) const;
 
-    std::optional<std::vector<Redirect>> redirect_list(Tokenizer &tokenizer) const;
+    std::optional<std::vector<Redirect>> redirect_list(Tok &tokenizer) const;
 
-    std::optional<Redirect> io_redirect(Tokenizer &tokenizer) const;
+    std::optional<Redirect> io_redirect(Tok &tokenizer) const;
 
-    std::optional<Redirect> io_file(Tokenizer &tokenizer) const;
+    std::optional<Redirect> io_file(Tok &tokenizer) const;
 
-    std::optional<Redirect> io_here(Tokenizer &tokenizer) const;
+    std::optional<Redirect> io_here(Tok &tokenizer) const;
 
-    std::optional<std::string_view> filename(Tokenizer &tokenizer) const;
+    std::optional<std::string_view> filename(Tok &tokenizer) const;
 
-    bool newline_list(Tokenizer &tokenizer) const;
+    bool newline_list(Tok &tokenizer) const;
 
-    void linebreak(Tokenizer &tokenizer) const;
+    void linebreak(Tok &tokenizer) const;
 
-    std::optional<Token> word(Tokenizer &tokenizer) const;
+    std::optional<Token> word(Tok &tokenizer) const;
 
-    inline std::optional<Token> token(Tokenizer &tokenizer, const TokenType type) const;
+    inline std::optional<Token> token(Tok &tokenizer, const TokenType type) const;
 };
 
 class ArgsToExec

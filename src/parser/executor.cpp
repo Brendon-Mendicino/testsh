@@ -606,7 +606,7 @@ std::vector<std::string> Executor::process_input() const
     }
 
     Tokenizer closing_tok{process_subs_tok};
-    const auto prog = SyntaxTree().cmd_substitution(closing_tok);
+    const auto prog = SyntaxTree<Tokenizer>().cmd_substitution(closing_tok);
     if (!prog)
         return support;
 
@@ -639,7 +639,7 @@ ExecStats Executor::execute() const
     auto support = this->process_input();
 
     Tokenizer tokenizer{support};
-    SyntaxTree tree;
+    SyntaxTree<Tokenizer> tree;
 
     // TODO: modify this
     if (tokenizer.next_is_eof())
