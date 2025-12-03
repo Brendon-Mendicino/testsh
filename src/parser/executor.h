@@ -45,7 +45,7 @@ class Executor
 
     bool line_has_continuation() const;
     bool read_stdin();
-    std::string process_substitution(const ThisProgram &prog) const;
+    std::string simple_substitution(const SimpleSubstitution &prog) const;
     std::string cmd_substitution(const CmdSubstitution &cmd) const;
     bool substitution_run(std::vector<std::string> &support) const;
     std::vector<std::string> process_input() const;

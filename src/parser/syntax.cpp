@@ -4,32 +4,6 @@
 #include <charconv>
 
 /**
- * @brief Use this function if you want to check an optional variant.
- * If the return value of the fucntion `fn` is `std::nullopt` then
- * don't commint the advancements to the tokenizer.
- *
- * @tparam VariantType
- * @tparam Fn
- * @param tokenizer
- * @param fn
- * @return std::optional<VariantType>
- */
-template <IsTokenizer Tok>
-template <typename VariantType, typename Fn>
-inline std::optional<VariantType> SyntaxTree<Tok>::check(Tok &tokenizer, Fn fn) const
-{
-    Tok sub_tok{tokenizer};
-
-    if (auto list = (this->*fn)(sub_tok))
-    {
-        tokenizer = sub_tok;
-        return VariantType{std::move(*list)};
-    }
-
-    return std::nullopt;
-}
-
-/**
  * BNF:
  *
  * ```
@@ -130,7 +104,7 @@ std::optional<CmdSubstitution> SyntaxTree<Tok>::list_substitution(Tok &tokenizer
  * @return std::optional<ThisProgram>
  */
 template <IsTokenizer Tok>
-std::optional<CmdSubstitution> SyntaxTree<Tok>::simple_substitution(Tok &tokenizer) const
+std::optional<SimpleSubstitution> SyntaxTree<Tok>::simple_substitution(Tok &tokenizer) const
 {
     Tok sub_tokenizer{tokenizer};
 
@@ -148,13 +122,11 @@ std::optional<CmdSubstitution> SyntaxTree<Tok>::simple_substitution(Tok &tokeniz
         return std::nullopt;
 
     tokenizer = sub_tokenizer;
-    std::vector<InnerSubstitution> child;
-    child.emplace_back(std::move(*program));
 
-    return CmdSubstitution{
+    return SimpleSubstitution{
         .start = *and_open,
         .end = *close_round,
-        .child = std::move(child),
+        .prog = std::move(*program),
     };
 }
 
@@ -192,7 +164,7 @@ std::optional<ThisProgram> SyntaxTree<Tok>::program(Tok &tokenizer) const
     tokenizer = sub_tokenizer;
 
     return ThisProgram{
-        .child = std::make_unique<CompleteCommands>(std::move(*complete_commands)),
+        .child = std::move(*complete_commands),
     };
 }
 
@@ -489,8 +461,11 @@ std::optional<Pipeline> SyntaxTree<Tok>::pipe_sequence(Tok &tokenizer) const
 template <IsTokenizer Tok>
 std::optional<Command> SyntaxTree<Tok>::command(Tok &tokenizer) const
 {
-    if (auto syn_words = this->check<Command>(tokenizer, &SyntaxTree<Tok>::simple_command))
-        return syn_words;
+    auto simple_command = this->simple_command(tokenizer);
+    if (simple_command)
+    {
+        return std::move(*simple_command);
+    }
 
     Tok subshell_tok{tokenizer};
     auto subshell = this->compound_command(subshell_tok);
@@ -1003,7 +978,7 @@ std::optional<Token> SyntaxTree<Tok>::word(Tok &tokenizer) const
     if (!word)
         return std::nullopt;
 
-    if (word->type != TokenType::word)
+    if (word->type != TokenType::word && word->type != TokenType::quoted_word)
         return std::nullopt;
 
     tokenizer.next_token();

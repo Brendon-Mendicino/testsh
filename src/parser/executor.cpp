@@ -427,11 +427,11 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
 
 ExecStats Executor::program(const ThisProgram &program) const
 {
-    if (!program.child.has_value())
+    if (program.child.empty())
         return {};
 
     ExecStats retval{};
-    for (const auto &complete_command : **program.child)
+    for (const auto &complete_command : program.child)
     {
         retval = this->sequential_list(complete_command);
     }
@@ -490,7 +490,7 @@ bool Executor::read_stdin()
     return true;
 }
 
-std::string Executor::process_substitution(const ThisProgram &prog) const
+std::string Executor::simple_substitution(const SimpleSubstitution &prog) const
 {
     // Setup piping for stdout redirections
     auto pipefd = create_pipe();
@@ -512,7 +512,7 @@ std::string Executor::process_substitution(const ThisProgram &prog) const
         close(reader_fd);
         dup2(writer_fd, STDOUT_FILENO);
 
-        const auto stats = this->program(prog);
+        const auto stats = this->program(prog.prog);
 
         close(writer_fd);
         exit(stats.exit_code);
@@ -531,9 +531,18 @@ std::string Executor::process_substitution(const ThisProgram &prog) const
 
     close(reader_fd);
 
+    // The standard states that if the stdout of a command
+    // end with a newline this has to be removed.
+    if (!substitution.empty() && substitution.back() == '\n')
+    {
+        return substitution.substr(0, substitution.length() - 1);
+    }
+
     return substitution;
 }
 
+// For substitution details take a look at the standard.
+// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_03
 std::string Executor::cmd_substitution(const CmdSubstitution &cmd) const
 {
     std::vector<Token> tokens{};
@@ -545,25 +554,49 @@ std::string Executor::cmd_substitution(const CmdSubstitution &cmd) const
             overloads{
                 [&](const CmdSubstitution &cmd)
                 {
-                    str_buffer.emplace_back("'" + this->cmd_substitution(cmd) + "'");
-                    return Token{.value = str_buffer.back(), .type = TokenType::quoted_word};
+                    auto tok = "'" + this->cmd_substitution(cmd) + "'";
+                    auto &ref = str_buffer.emplace_back(std::move(tok));
+
+                    return Token{
+                        .type = TokenType::quoted_word,
+                        .value = ref,
+                    };
                 },
-                [&](const ThisProgram &prog)
+                [&](const SimpleSubstitution &prog)
                 {
-                    str_buffer.emplace_back("'" + this->process_substitution(prog) + "'");
-                    return Token{.value = str_buffer.back(), .type = TokenType::quoted_word};
+                    auto tok = "'" + this->simple_substitution(prog) + "'";
+                    auto &ref = str_buffer.emplace_back(std::move(tok));
+
+                    return Token{
+                        .type = TokenType::quoted_word,
+                        .value = ref,
+                    };
                 },
                 [&](const Token &token)
                 { return token; },
             },
             inner);
 
-        tokens.emplace_back(token);
+        tokens.emplace_back(std::move(token));
     }
 
-    // Process
+    TokenIter token_stream{tokens};
 
-    return {};
+    // Process all the tokens
+    auto upper_command = SyntaxTree<TokenIter>().program(token_stream);
+    if (!upper_command)
+        throw std::runtime_error("Failed to parse command substitution");
+
+    std::println(stderr, "=== SUBS ===");
+    std::println(stderr, "{:#?}", upper_command);
+
+    std::string subs = this->simple_substitution({
+        .start = cmd.start,
+        .end = cmd.end,
+        .prog = std::move(*upper_command),
+    });
+
+    return subs;
 }
 
 std::vector<std::string> Executor::process_input() const
@@ -606,12 +639,12 @@ std::vector<std::string> Executor::process_input() const
     }
 
     Tokenizer closing_tok{process_subs_tok};
-    const auto prog = SyntaxTree<Tokenizer>().cmd_substitution(closing_tok);
-    if (!prog)
+    const auto cmd = SyntaxTree<Tokenizer>().cmd_substitution(closing_tok);
+    if (!cmd)
         return support;
 
     std::println(stderr, "=== CMD SUBSTITUION ===");
-    std::println(stderr, "{:#?}", prog);
+    std::println(stderr, "{:#?}", cmd);
 
     // TODO: this part needs to be structured better
     const Token starting_token = process_subs_tok.next_token().value();
@@ -626,10 +659,9 @@ std::vector<std::string> Executor::process_input() const
     size_t end_str = ending_token.end;
 
     // Get the stdout of the child shell
-    // const std::string substitution = this->process_substitution(*prog);
+    const std::string substitution = this->cmd_substitution(*cmd);
 
-    // TODO: for now ignore multilines
-    // support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
+    support[start_vec] = support[start_vec].substr(0, start_str) + substitution + support[end_vec].substr(end_str);
 
     return support;
 }

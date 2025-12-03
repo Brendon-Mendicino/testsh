@@ -65,14 +65,25 @@ static const std::vector<Specification> specs{
 
 std::string Token::text() const
 {
-    if (type != TokenType::word)
-        return std::string{value};
+    std::string retval;
 
-    std::string retval{};
-    std::ranges::copy(
-        value | vw::filter([](const char c) { return c != '\\'; }),
-        std::back_inserter(retval)
-    );
+    switch (type)
+    {
+    case TokenType::word:
+        std::ranges::copy(
+            value | vw::filter([](const char c)
+                               { return c != '\\'; }),
+            std::back_inserter(retval));
+        break;
+
+    case TokenType::quoted_word:
+        retval = value.substr(1, value.size() - 2);
+        break;
+
+    default:
+        retval = value;
+        break;
+    }
 
     return retval;
 }
@@ -230,5 +241,8 @@ bool TokenIter::next_is_eof() const
 
 std::optional<Token> TokenIter::peek() const
 {
+    if (this->tokens.empty())
+        return std::nullopt;
+
     return this->tokens.front();
 }

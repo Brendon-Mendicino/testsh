@@ -92,11 +92,19 @@ using CompleteCommands = std::vector<SequentialList>;
 
 struct ThisProgram
 {
-    optional_ptr<CompleteCommands> child;
+    CompleteCommands child;
 };
 
 struct CmdSubstitution;
-using InnerSubstitution = std::variant<CmdSubstitution, ThisProgram, Token>;
+struct SimpleSubstitution;
+using InnerSubstitution = std::variant<CmdSubstitution, SimpleSubstitution, Token>;
+
+struct SimpleSubstitution
+{
+    Token start;
+    Token end;
+    ThisProgram prog;
+};
 
 struct CmdSubstitution
 {
@@ -118,15 +126,12 @@ struct CmdSubstitution
 template <IsTokenizer Tok>
 class SyntaxTree
 {
-    template <typename VariantType, typename Fn>
-    inline std::optional<VariantType> check(Tok &tokenizer, Fn fn) const;
-
 public:
     std::optional<CmdSubstitution> cmd_substitution(Tok &tokenizer) const;
 
     std::optional<CmdSubstitution> list_substitution(Tok &tokenizer) const;
 
-    std::optional<CmdSubstitution> simple_substitution(Tok &tokenizer) const;
+    std::optional<SimpleSubstitution> simple_substitution(Tok &tokenizer) const;
 
     std::optional<ThisProgram> program(Tok &tokenizer) const;
 
@@ -326,6 +331,19 @@ struct std::formatter<T> : debug_spec
         this->start<T>(ctx);
         this->field("left", node.left, ctx);
         this->field("right", node.right, ctx);
+        return this->finish(ctx);
+    }
+};
+
+template <>
+struct std::formatter<SimpleSubstitution> : debug_spec
+{
+    auto format(const SimpleSubstitution &subs, auto &ctx) const
+    {
+        this->start<SimpleSubstitution>(ctx);
+        this->field("start", subs.start, ctx);
+        this->field("end", subs.end, ctx);
+        this->field("prog", subs.prog, ctx);
         return this->finish(ctx);
     }
 };

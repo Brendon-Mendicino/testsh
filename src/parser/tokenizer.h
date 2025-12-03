@@ -103,7 +103,7 @@ public:
 
 class TokenIter
 {
-    std::span<Token> tokens;
+    std::span<const Token> tokens;
 
 public:
     TokenIter(std::span<Token> tokens);
