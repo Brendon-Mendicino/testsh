@@ -1,7 +1,7 @@
 #ifndef TESTSH_BUILTIN_H
 #define TESTSH_BUILTIN_H
 
-#include "../parser/syntax.h"
+#include "syntax.h"
 #include <vector>
 #include <string_view>
 

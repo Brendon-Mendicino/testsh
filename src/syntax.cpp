@@ -154,7 +154,7 @@ std::optional<ThisProgram> SyntaxTree<Tok>::program(Tok &tokenizer) const
     if (sub_tokenizer.next_is_eof())
     {
         tokenizer = sub_tokenizer;
-        return {};
+        return ThisProgram{};
     }
 
     auto complete_commands = this->complete_commands(sub_tokenizer);

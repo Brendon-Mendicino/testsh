@@ -7,7 +7,7 @@
 #include <optional>
 #include <utility>
 #include <span>
-#include "../util.h"
+#include "util.h"
 
 enum class TokenType
 {

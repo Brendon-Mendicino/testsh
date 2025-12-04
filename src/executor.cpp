@@ -1,6 +1,6 @@
 #include "executor.h"
-#include "../util.h"
-#include "../builtin/builtin.h"
+#include "util.h"
+#include "builtin.h"
 #include <iostream>
 #include <string>
 #include <variant>

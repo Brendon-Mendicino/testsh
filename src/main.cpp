@@ -10,8 +10,8 @@
 #include <ranges>
 #include <cstring>
 #include "re2/re2.h"
-#include "parser/syntax.h"
-#include "parser/executor.h"
+#include "syntax.h"
+#include "executor.h"
 
 namespace rng = std::ranges::views;
 
