@@ -24,6 +24,7 @@ struct CommandState
 {
     std::vector<std::tuple<int, int>> redirects;
     std::vector<int> fd_to_close;
+    bool exec_async = false;
 
     bool initialized() const
     { return !redirects.empty(); }
@@ -36,10 +37,10 @@ class Executor
 
     std::optional<ExecStats> builtin(const SimpleCommand &cmd) const;
     ExecStats simple_command(const SimpleCommand &cmd, const CommandState &state) const;
-    ExecStats and_list(const AndList &and_list) const;
-    ExecStats or_list(const OrList &or_list) const;
+    ExecStats and_list(const AndList &and_list, const CommandState &state) const;
+    ExecStats or_list(const OrList &or_list, const CommandState &state) const;
     ExecStats pipeline(const Pipeline &pipeline, const CommandState &state) const;
-    ExecStats op_list(const OpList &list) const;
+    ExecStats op_list(const OpList &list, const CommandState &state) const;
     ExecStats sequential_list(const SequentialList &sequential_list) const;
     ExecStats async_list(const AsyncList &async_list) const;
     ExecStats list(const List &list) const;

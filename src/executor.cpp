@@ -314,12 +314,19 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd, const CommandState 
         exit(1);
     };
 
-    return Spawner::spawn(child);
+    ExecStats retval;
+
+    if (state.exec_async)
+        retval = Spawner::spawn_async(child);
+    else
+        retval = Spawner::spawn(child);
+
+    return retval;
 }
 
-ExecStats Executor::and_list(const AndList &and_list) const
+ExecStats Executor::and_list(const AndList &and_list, const CommandState &state) const
 {
-    const auto lhs = this->op_list(*and_list.left);
+    const auto lhs = this->op_list(*and_list.left, state);
 
     // Don't execute the rhs if the lhs terminated with an error
     if (lhs.exit_code != 0)
@@ -327,14 +334,14 @@ ExecStats Executor::and_list(const AndList &and_list) const
         return lhs;
     }
 
-    const auto rhs = this->op_list(*and_list.right);
+    const auto rhs = this->op_list(*and_list.right, state);
 
     return rhs;
 }
 
-ExecStats Executor::or_list(const OrList &or_list) const
+ExecStats Executor::or_list(const OrList &or_list, const CommandState &state) const
 {
-    const auto lhs = this->op_list(*or_list.left);
+    const auto lhs = this->op_list(*or_list.left, state);
 
     // Don't execute the rhs if the lhs terminated with a success
     if (lhs.exit_code == 0)
@@ -342,7 +349,7 @@ ExecStats Executor::or_list(const OrList &or_list) const
         return lhs;
     }
 
-    const auto rhs = this->op_list(*or_list.right);
+    const auto rhs = this->op_list(*or_list.right, state);
 
     return rhs;
 }
@@ -369,9 +376,11 @@ ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state
 
     ExecStats retval;
 
-    // We are inside a pipeline execution
     if (state.initialized())
     {
+        left_state.exec_async = false;
+
+        // We are inside a pipeline execution
         auto async_child = [&]()
         {
             this->command(*pipeline.right, left_state);
@@ -390,6 +399,7 @@ ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state
     }
     else
     {
+        // Last command of pipeline execution
         retval = this->command(*pipeline.right, left_state);
 
         if (pipeline.negated)
@@ -401,16 +411,16 @@ ExecStats Executor::pipeline(const Pipeline &pipeline, const CommandState &state
     return retval;
 }
 
-ExecStats Executor::op_list(const OpList &list) const
+ExecStats Executor::op_list(const OpList &list, const CommandState &state) const
 {
     const auto stats = std::visit(
         overloads{
             [&](const AndList &and_list)
-            { return this->and_list(and_list); },
+            { return this->and_list(and_list, state); },
             [&](const OrList &or_list)
-            { return this->or_list(or_list); },
+            { return this->or_list(or_list, state); },
             [&](const Pipeline &pipeline)
-            { return this->pipeline(pipeline, {}); },
+            { return this->pipeline(pipeline, state); },
         },
         list);
 
@@ -424,7 +434,7 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list) const
         this->list(**sequential_list.left);
     }
 
-    const auto stats = this->op_list(*sequential_list.right);
+    const auto stats = this->op_list(*sequential_list.right, {});
     return stats;
 }
 
@@ -435,7 +445,7 @@ ExecStats Executor::async_list(const AsyncList &async_list) const
         this->list(**async_list.left);
     }
 
-    const auto stats = this->op_list(*async_list.right);
+    const auto stats = this->op_list(*async_list.right, {.exec_async = true});
     return stats;
 }
 
@@ -486,7 +496,14 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
         exit(child_status.exit_code);
     };
 
-    return Spawner::spawn(subshell_call);
+    ExecStats retval;
+
+    if (state.exec_async)
+        retval = Spawner::spawn_async(subshell_call);
+    else
+        retval = Spawner::spawn(subshell_call);
+
+    return retval;
 }
 
 ExecStats Executor::program(const ThisProgram &program) const
