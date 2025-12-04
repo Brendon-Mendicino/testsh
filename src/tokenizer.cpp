@@ -24,6 +24,7 @@ static const std::vector<Specification> specs{
     {R"(^(;))", TokenType::semicolon},
     {R"(^(&&))", TokenType::and_and},
     {R"(^(\|\|))", TokenType::or_or},
+    {R"(^(&))", TokenType::andper},
 
     // New line
     {R"(^(\n))", TokenType::new_line},

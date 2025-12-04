@@ -41,6 +41,8 @@ class Executor
     ExecStats pipeline(const Pipeline &pipeline, const CommandState &state) const;
     ExecStats op_list(const OpList &list) const;
     ExecStats sequential_list(const SequentialList &sequential_list) const;
+    ExecStats async_list(const AsyncList &async_list) const;
+    ExecStats list(const List &list) const;
     ExecStats command(const Command &command, const CommandState &state) const;
     ExecStats subshell(const Subshell &subshell, const CommandState &state) const;
     ExecStats program(const ThisProgram &program) const;

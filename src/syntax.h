@@ -51,10 +51,12 @@ struct AndList;
 struct OrList;
 struct Subshell;
 struct Pipeline;
+struct SequentialList;
+struct AsyncList;
 
 using Command = std::variant<SimpleCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
-// using List = std::variant<SequentialList, AsyncList>;
+using List = std::variant<SequentialList, AsyncList>;
 
 struct AndList
 {
@@ -68,12 +70,6 @@ struct OrList
     std::unique_ptr<OpList> right;
 };
 
-struct SequentialList
-{
-    optional_ptr<SequentialList> left;
-    std::unique_ptr<OpList> right;
-};
-
 struct Pipeline
 {
     optional_ptr<Pipeline> left;
@@ -82,13 +78,30 @@ struct Pipeline
     bool negated;
 };
 
+
+struct SequentialList
+{
+    optional_ptr<List> left;
+    std::unique_ptr<OpList> right;
+
+    static SequentialList from_async(AsyncList &&async);
+};
+
+struct AsyncList
+{
+    optional_ptr<List> left;
+    std::unique_ptr<OpList> right;
+
+    static AsyncList from_seq(SequentialList &&seq);
+};
+
 struct Subshell
 {
-    std::unique_ptr<SequentialList> seq_list;
+    std::unique_ptr<List> seq_list;
     std::vector<Redirect> redirections;
 };
 
-using CompleteCommands = std::vector<SequentialList>;
+using CompleteCommands = std::vector<List>;
 
 struct ThisProgram
 {
@@ -137,7 +150,7 @@ public:
 
     std::optional<CompleteCommands> complete_commands(Tok &tokenizer) const;
 
-    std::optional<SequentialList> complete_command(Tok &tokenizer) const;
+    std::optional<List> complete_command(Tok &tokenizer) const;
 
     std::optional<SequentialList> list(Tok &tokenizer) const;
 
@@ -153,7 +166,7 @@ public:
 
     std::optional<Subshell> subshell(Tok &tokenizer) const;
 
-    std::optional<SequentialList> compound_list(Tok &tokenizer) const;
+    std::optional<List> compound_list(Tok &tokenizer) const;
 
     std::optional<SequentialList> term(Tok &tokenizer) const;
 
@@ -172,6 +185,10 @@ public:
     bool newline_list(Tok &tokenizer) const;
 
     void linebreak(Tok &tokenizer) const;
+
+    std::optional<Token> separator_op(Tok &tokenizer) const;
+
+    std::optional<Token> separator(Tok &tokenizer) const;
 
     std::optional<Token> word(Tok &tokenizer) const;
 

@@ -421,11 +421,34 @@ ExecStats Executor::sequential_list(const SequentialList &sequential_list) const
 {
     if (sequential_list.left.has_value())
     {
-        this->sequential_list(**sequential_list.left);
+        this->list(**sequential_list.left);
     }
 
     const auto stats = this->op_list(*sequential_list.right);
     return stats;
+}
+
+ExecStats Executor::async_list(const AsyncList &async_list) const
+{
+    if (async_list.left.has_value())
+    {
+        this->list(**async_list.left);
+    }
+
+    const auto stats = this->op_list(*async_list.right);
+    return stats;
+}
+
+ExecStats Executor::list(const List &list) const
+{
+    return std::visit(
+        overloads{
+            [&](const SequentialList &seq)
+            { return this->sequential_list(seq); },
+            [&](const AsyncList &async)
+            { return this->async_list(async); },
+        },
+        list);
 }
 
 ExecStats Executor::command(const Command &command, const CommandState &state) const
@@ -459,7 +482,7 @@ ExecStats Executor::subshell(const Subshell &subshell, const CommandState &state
         if (!redirect.apply_redirections())
             exit(1);
 
-        const auto child_status = this->sequential_list(*subshell.seq_list);
+        const auto child_status = this->list(*subshell.seq_list);
         exit(child_status.exit_code);
     };
 
@@ -474,7 +497,7 @@ ExecStats Executor::program(const ThisProgram &program) const
     ExecStats retval{};
     for (const auto &complete_command : program.child)
     {
-        retval = this->sequential_list(complete_command);
+        retval = this->list(complete_command);
     }
 
     return retval;

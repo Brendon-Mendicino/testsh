@@ -3,6 +3,40 @@
 #include <cstdlib>
 #include <charconv>
 
+// ------------------------------------
+// SequentialList
+// ------------------------------------
+
+SequentialList SequentialList::from_async(AsyncList &&async)
+{
+    if (!async.left)
+        return SequentialList{.right = std::move(async.right)};
+
+    return SequentialList{
+        .left = std::move(*async.left),
+        .right = std::move(async.right),
+    };
+}
+
+// ------------------------------------
+// AsyncList
+// ------------------------------------
+
+AsyncList AsyncList::from_seq(SequentialList &&seq)
+{
+    if (!seq.left)
+        return AsyncList{.right = std::move(seq.right)};
+
+    return AsyncList{
+        .left = std::move(*seq.left),
+        .right = std::move(seq.right),
+    };
+}
+
+// ------------------------------------
+// SyntaxTree
+// ------------------------------------
+
 /**
  * BNF:
  *
@@ -203,7 +237,7 @@ std::optional<CompleteCommands> SyntaxTree<Tok>::complete_commands(Tok &tokenize
  *
  * ```
  * complete_command ::= list
- *                    | list SEMI
+ *                    | list separator_op
  *                    ;
  * ```
  *
@@ -211,7 +245,7 @@ std::optional<CompleteCommands> SyntaxTree<Tok>::complete_commands(Tok &tokenize
  * @return std::optional<SequentialList>
  */
 template <IsTokenizer Tok>
-std::optional<SequentialList> SyntaxTree<Tok>::complete_command(Tok &tokenizer) const
+std::optional<List> SyntaxTree<Tok>::complete_command(Tok &tokenizer) const
 {
     auto list = this->list(tokenizer);
     if (!list.has_value())
@@ -220,7 +254,11 @@ std::optional<SequentialList> SyntaxTree<Tok>::complete_command(Tok &tokenizer) 
     // Advance the tokenizer if the next token is a SEMI.
     // If the next token is a SEMI, the tokenizer will be automatically
     // advanced by the function.
-    this->token(tokenizer, TokenType::semicolon);
+    const auto sep = this->separator_op(tokenizer);
+    if (sep && sep->type == TokenType::andper && list)
+    {
+        return AsyncList::from_seq(std::move(*list));
+    }
 
     return list;
 }
@@ -229,8 +267,8 @@ std::optional<SequentialList> SyntaxTree<Tok>::complete_command(Tok &tokenizer) 
  * BNF:
  *
  * ```
- * list ::= op_list
- *        | list SEMI op_list
+ * list ::=                and_or
+ *        | list separator and_or
  *        ;
  * ```
  *
@@ -254,8 +292,8 @@ std::optional<SequentialList> SyntaxTree<Tok>::list(Tok &tokenizer) const
         // If the next token is not what we expect don't advance the tokenizer sequence
         Tok sub_token{tokenizer};
 
-        const auto semi = this->token(sub_token, TokenType::semicolon);
-        if (!semi)
+        const auto sep = this->separator_op(sub_token);
+        if (!sep)
         {
             break;
         }
@@ -266,10 +304,23 @@ std::optional<SequentialList> SyntaxTree<Tok>::list(Tok &tokenizer) const
             break;
         }
 
-        SequentialList rotated_list{
-            .left = std::make_unique<SequentialList>(std::move(retval)),
-            .right = std::make_unique<OpList>(std::move(*next_op_list)),
-        };
+        SequentialList rotated_list{};
+
+        if (sep->type == TokenType::andper)
+        {
+            // Convert the previous SequentialList to an AsyncList
+            rotated_list = SequentialList{
+                .left = std::make_unique<List>(AsyncList::from_seq(std::move(retval))),
+                .right = std::make_unique<OpList>(std::move(*next_op_list)),
+            };
+        }
+        else
+        {
+            rotated_list = SequentialList{
+                .left = std::make_unique<List>(std::move(retval)),
+                .right = std::make_unique<OpList>(std::move(*next_op_list)),
+            };
+        }
 
         retval = std::move(rotated_list);
 
@@ -532,7 +583,6 @@ std::optional<Subshell> SyntaxTree<Tok>::subshell(Tok &tokenizer) const
     if (!open_round)
         return std::nullopt;
 
-    // TODO: change this to compound_list
     auto compound_list = this->compound_list(sub_tokenizer);
     if (!compound_list)
         return std::nullopt;
@@ -544,7 +594,7 @@ std::optional<Subshell> SyntaxTree<Tok>::subshell(Tok &tokenizer) const
     tokenizer = sub_tokenizer;
 
     return Subshell{
-        .seq_list = std::make_unique<SequentialList>(std::move(*compound_list)),
+        .seq_list = std::make_unique<List>(std::move(*compound_list)),
     };
 }
 
@@ -561,7 +611,7 @@ std::optional<Subshell> SyntaxTree<Tok>::subshell(Tok &tokenizer) const
  * @return std::optional<SequentialList>
  */
 template <IsTokenizer Tok>
-std::optional<SequentialList> SyntaxTree<Tok>::compound_list(Tok &tokenizer) const
+std::optional<List> SyntaxTree<Tok>::compound_list(Tok &tokenizer) const
 {
     Tok sub_tok{tokenizer};
 
@@ -571,7 +621,13 @@ std::optional<SequentialList> SyntaxTree<Tok>::compound_list(Tok &tokenizer) con
     if (!term)
         return std::nullopt;
 
-    this->token(sub_tok, TokenType::semicolon);
+    const auto sep = this->separator(sub_tok);
+    if (sep && sep->type == TokenType::andper)
+    {
+        tokenizer = sub_tok;
+
+        return AsyncList::from_seq(std::move(*term));
+    }
 
     tokenizer = sub_tok;
 
@@ -607,8 +663,8 @@ std::optional<SequentialList> SyntaxTree<Tok>::term(Tok &tokenizer) const
         // If the next token is not what we expect don't advance the tokenizer sequence
         Tok sub_token{tokenizer};
 
-        const auto semi = this->token(sub_token, TokenType::semicolon);
-        if (!semi)
+        const auto sep = this->separator(sub_token);
+        if (!sep)
         {
             break;
         }
@@ -619,10 +675,23 @@ std::optional<SequentialList> SyntaxTree<Tok>::term(Tok &tokenizer) const
             break;
         }
 
-        SequentialList rotated_list{
-            .left = std::make_unique<SequentialList>(std::move(retval)),
-            .right = std::make_unique<OpList>(std::move(*next_op_list)),
-        };
+        SequentialList rotated_list{};
+
+        if (sep->type == TokenType::andper)
+        {
+            // Convert the previous SequentialList to an AsyncList
+            rotated_list = SequentialList{
+                .left = std::make_unique<List>(AsyncList::from_seq(std::move(retval))),
+                .right = std::make_unique<OpList>(std::move(*next_op_list)),
+            };
+        }
+        else
+        {
+            rotated_list = SequentialList{
+                .left = std::make_unique<List>(std::move(retval)),
+                .right = std::make_unique<OpList>(std::move(*next_op_list)),
+            };
+        }
 
         retval = std::move(rotated_list);
 
@@ -971,6 +1040,65 @@ template <IsTokenizer Tok>
 void SyntaxTree<Tok>::linebreak(Tok &tokenizer) const
 {
     this->newline_list(tokenizer);
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * separator_op ::= '&'
+ *                | ';'
+ *                ;
+ * ```
+ *
+ * @tparam Tok
+ * @param tokenizer
+ * @return std::optional<Token>
+ */
+template <IsTokenizer Tok>
+std::optional<Token> SyntaxTree<Tok>::separator_op(Tok &tokenizer) const
+{
+    const auto andp = this->token(tokenizer, TokenType::andper);
+    if (andp)
+        return andp;
+
+    const auto semi = this->token(tokenizer, TokenType::semicolon);
+    if (semi)
+        return semi;
+
+    return std::nullopt;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * separator ::= separator_op linebreak
+ *             | newline_list
+ *             ;
+ * ```
+ *
+ * @tparam Tok
+ * @param tokenizer
+ * @return std::optional<Token>
+ */
+template <IsTokenizer Tok>
+std::optional<Token> SyntaxTree<Tok>::separator(Tok &tokenizer) const
+{
+    const auto sep = this->separator_op(tokenizer);
+    if (sep)
+    {
+        this->linebreak(tokenizer);
+        return sep;
+    }
+
+    const auto newlines = this->newline_list(tokenizer);
+    if (newlines)
+    {
+        return Token{.type = TokenType::new_line};
+    }
+
+    return std::nullopt;
 }
 
 template <IsTokenizer Tok>
