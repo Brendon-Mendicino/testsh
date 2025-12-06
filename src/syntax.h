@@ -108,6 +108,10 @@ struct ThisProgram
     CompleteCommands child;
 };
 
+// ------------------------------------
+// Substitutions
+// ------------------------------------
+
 struct CmdSubstitution;
 struct SimpleSubstitution;
 using InnerSubstitution = std::variant<CmdSubstitution, SimpleSubstitution, Token>;
