@@ -1,10 +1,8 @@
 #include "tokenizer.h"
 #include "re2/re2.h"
-#include <vector>
-#include <format>
-#include <print>
-#include <ranges>
 #include <cassert>
+#include <ranges>
+#include <vector>
 
 namespace vw = std::ranges::views;
 
@@ -64,16 +62,13 @@ static const std::vector<Specification> specs{
 // Token
 // ------------------------------------
 
-std::string Token::text() const
-{
+std::string Token::text() const {
     std::string retval;
 
-    switch (type)
-    {
+    switch (type) {
     case TokenType::word:
         std::ranges::copy(
-            value | vw::filter([](const char c)
-                               { return c != '\\'; }),
+            value | vw::filter([](const char c) { return c != '\\'; }),
             std::back_inserter(retval));
         break;
 
@@ -93,20 +88,17 @@ std::string Token::text() const
 // UnbufferedTokenizer
 // ------------------------------------
 
-std::optional<Token> UnbufferedTokenizer::next_token()
-{
+std::optional<Token> UnbufferedTokenizer::next_token() {
     std::string_view match{};
 
-    for (const auto &spec : specs)
-    {
+    for (const auto &spec : specs) {
         if (!RE2::PartialMatch(this->input, spec.regex, &match))
             continue;
 
-        const Token token{
-            .type = spec.spec_type,
-            .value = match,
-            .start = this->string_offset,
-            .end = this->string_offset + match.length()};
+        const Token token{.type = spec.spec_type,
+                          .value = match,
+                          .start = this->string_offset,
+                          .end = this->string_offset + match.length()};
 
         assert(match.length() <= this->input.length());
 
@@ -122,16 +114,14 @@ std::optional<Token> UnbufferedTokenizer::next_token()
     return std::nullopt;
 }
 
-bool UnbufferedTokenizer::next_is_eof() const
-{
+bool UnbufferedTokenizer::next_is_eof() const {
     if (const auto next = this->peek())
         return next->type == TokenType::eof;
 
     return false;
 }
 
-std::optional<Token> UnbufferedTokenizer::peek() const
-{
+std::optional<Token> UnbufferedTokenizer::peek() const {
     UnbufferedTokenizer copy{*this};
 
     return copy.next_token();
@@ -143,10 +133,7 @@ std::optional<Token> UnbufferedTokenizer::peek() const
 
 Tokenizer::Tokenizer(const TokState &state) : state(state), prev_state() {}
 
-void Tokenizer::update_prev()
-{
-    this->prev_state = this->state;
-}
+void Tokenizer::update_prev() { this->prev_state = this->state; }
 
 /**
  * Advances the `buffered_input` and stores the leftover string
@@ -155,44 +142,42 @@ void Tokenizer::update_prev()
  *
  * Returns false if the buffer was empty.
  */
-bool Tokenizer::advance_buffer()
-{
+bool Tokenizer::advance_buffer() {
     if (this->state.buffered_input.size() == 0)
         return false;
 
-    assertm(this->state.inner_tokenizer.peek().value().type == TokenType::eof,
-            "The inner tokenizer must be empty before advancing the line buffer!");
+    assertm(
+        this->state.inner_tokenizer.peek().value().type == TokenType::eof,
+        "The inner tokenizer must be empty before advancing the line buffer!");
 
-    this->state.inner_tokenizer = UnbufferedTokenizer{this->state.buffered_input[0]};
+    this->state.inner_tokenizer =
+        UnbufferedTokenizer{this->state.buffered_input[0]};
 
     this->state.buffered_input = this->state.buffered_input.subspan(1);
 
     return true;
 }
 
-Tokenizer::Tokenizer(std::span<std::string> buffered_input) : state{.buffered_input = buffered_input, .inner_tokenizer = {""}} {}
+Tokenizer::Tokenizer(std::span<std::string> buffered_input)
+    : state{.buffered_input = buffered_input, .inner_tokenizer = {""}} {}
 
-size_t Tokenizer::buffer_size() const
-{
+size_t Tokenizer::buffer_size() const {
     // +1 because the last buffer is contained inside the UnbufferedTokenizer
     return this->state.buffered_input.size() + 1;
 }
 
-std::optional<Tokenizer> Tokenizer::prev() const
-{
+std::optional<Tokenizer> Tokenizer::prev() const {
     if (!this->prev_state)
         return std::nullopt;
 
     return Tokenizer{*prev_state};
 }
 
-std::optional<Token> Tokenizer::next_token()
-{
+std::optional<Token> Tokenizer::next_token() {
     this->update_prev();
     auto token = this->state.inner_tokenizer.next_token();
 
-    while (token.has_value() && token->type == TokenType::eof)
-    {
+    while (token.has_value() && token->type == TokenType::eof) {
         if (!this->advance_buffer())
             break;
 
@@ -202,16 +187,14 @@ std::optional<Token> Tokenizer::next_token()
     return token;
 }
 
-bool Tokenizer::next_is_eof() const
-{
+bool Tokenizer::next_is_eof() const {
     if (const auto next = this->peek())
         return next->type == TokenType::eof;
 
     return false;
 }
 
-std::optional<Token> Tokenizer::peek() const
-{
+std::optional<Token> Tokenizer::peek() const {
     Tokenizer copy{*this};
 
     return copy.next_token();
@@ -223,8 +206,7 @@ std::optional<Token> Tokenizer::peek() const
 
 TokenIter::TokenIter(std::span<Token> tokens) : tokens(tokens) {}
 
-std::optional<Token> TokenIter::next_token()
-{
+std::optional<Token> TokenIter::next_token() {
     if (this->tokens.empty())
         return std::nullopt;
 
@@ -235,13 +217,9 @@ std::optional<Token> TokenIter::next_token()
     return token;
 }
 
-bool TokenIter::next_is_eof() const
-{
-    return this->tokens.empty();
-}
+bool TokenIter::next_is_eof() const { return this->tokens.empty(); }
 
-std::optional<Token> TokenIter::peek() const
-{
+std::optional<Token> TokenIter::peek() const {
     if (this->tokens.empty())
         return std::nullopt;
 

@@ -1,13 +1,12 @@
 #ifndef TESTSH_JOB_H
 #define TESTSH_JOB_H
 
+#include "util.h"
+#include <format>
 #include <sys/types.h>
 #include <unordered_map>
-#include <format>
-#include "util.h"
 
-struct ExecStats
-{
+struct ExecStats {
     int exit_code;
     pid_t child_pid = -1;
     pid_t pipeline_pgid = -1;
@@ -22,8 +21,7 @@ struct ExecStats
  * https://www.gnu.org/software/libc/manual/html_node/Implementing-a-Shell.html
  *
  */
-struct Job
-{
+struct Job {
     pid_t pgid;
     std::unordered_map<pid_t, ExecStats> jobs;
     pid_t job_master;
@@ -39,11 +37,8 @@ struct Job
 // Format
 // -------------------------------------
 
-template <>
-struct std::formatter<ExecStats> : debug_spec
-{
-    auto format(const ExecStats &e, auto &ctx) const
-    {
+template <> struct std::formatter<ExecStats> : debug_spec {
+    auto format(const ExecStats &e, auto &ctx) const {
         this->start<ExecStats>(ctx);
         this->field("exit_code", e.exit_code, ctx);
         this->field("child_pid", e.child_pid, ctx);
@@ -54,14 +49,10 @@ struct std::formatter<ExecStats> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<Job> : debug_spec
-{
-    auto format(const Job &j, auto &ctx) const
-    {
+template <> struct std::formatter<Job> : debug_spec {
+    auto format(const Job &j, auto &ctx) const {
         std::vector<ExecStats> jobs;
-        for (const auto &[key, value] : j.jobs)
-        {
+        for (const auto &[key, value] : j.jobs) {
             jobs.emplace_back(value);
         }
 

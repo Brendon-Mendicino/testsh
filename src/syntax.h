@@ -2,45 +2,40 @@
 #define TESTSH_SYNTAX_H
 
 #include "tokenizer.h"
-#include <string_view>
-#include <vector>
-#include <format>
-#include <variant>
-#include <print>
-#include <memory>
-#include <utility>
 #include "util.h"
+#include <format>
+#include <memory>
+#include <print>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
 
-enum class OpenKind
-{
+enum class OpenKind {
     read,
     replace,
     append,
     rw,
 };
 
-struct FileRedirect
-{
+struct FileRedirect {
     int redirect_fd;
     OpenKind file_kind;
     std::string_view filename;
 };
 
-struct FdRedirect
-{
+struct FdRedirect {
     int fd_to_replace;
     int fd_replacer;
 };
 
-struct CloseFd
-{
+struct CloseFd {
     int fd;
 };
 
 using Redirect = std::variant<FileRedirect, FdRedirect, CloseFd>;
 
-struct SimpleCommand
-{
+struct SimpleCommand {
     Token program;
     // TODO: this should be Tokens
     std::vector<Token> arguments;
@@ -58,53 +53,45 @@ using Command = std::variant<SimpleCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
 using List = std::variant<SequentialList, AsyncList>;
 
-struct AndList
-{
+struct AndList {
     std::unique_ptr<OpList> left;
     std::unique_ptr<OpList> right;
 };
 
-struct OrList
-{
+struct OrList {
     std::unique_ptr<OpList> left;
     std::unique_ptr<OpList> right;
 };
 
-struct Pipeline
-{
+struct Pipeline {
     optional_ptr<Pipeline> left;
     std::unique_ptr<Command> right;
     // TODO: remember to add this to the formatter
     bool negated;
 };
 
-
-struct SequentialList
-{
+struct SequentialList {
     optional_ptr<List> left;
     std::unique_ptr<OpList> right;
 
     static SequentialList from_async(AsyncList &&async);
 };
 
-struct AsyncList
-{
+struct AsyncList {
     optional_ptr<List> left;
     std::unique_ptr<OpList> right;
 
     static AsyncList from_seq(SequentialList &&seq);
 };
 
-struct Subshell
-{
+struct Subshell {
     std::unique_ptr<List> seq_list;
     std::vector<Redirect> redirections;
 };
 
 using CompleteCommands = std::vector<List>;
 
-struct ThisProgram
-{
+struct ThisProgram {
     CompleteCommands child;
 };
 
@@ -114,17 +101,16 @@ struct ThisProgram
 
 struct CmdSubstitution;
 struct SimpleSubstitution;
-using InnerSubstitution = std::variant<CmdSubstitution, SimpleSubstitution, Token>;
+using InnerSubstitution =
+    std::variant<CmdSubstitution, SimpleSubstitution, Token>;
 
-struct SimpleSubstitution
-{
+struct SimpleSubstitution {
     Token start;
     Token end;
     ThisProgram prog;
 };
 
-struct CmdSubstitution
-{
+struct CmdSubstitution {
     Token start;
     Token end;
     std::vector<InnerSubstitution> child;
@@ -140,10 +126,8 @@ struct CmdSubstitution
  *
  * Remember to add the definitions of new methods in syntax-impl.cpp.
  */
-template <IsTokenizer Tok>
-class SyntaxTree
-{
-public:
+template <IsTokenizer Tok> class SyntaxTree {
+  public:
     std::optional<CmdSubstitution> cmd_substitution(Tok &tokenizer) const;
 
     std::optional<CmdSubstitution> list_substitution(Tok &tokenizer) const;
@@ -196,20 +180,19 @@ public:
 
     std::optional<Token> word(Tok &tokenizer) const;
 
-    inline std::optional<Token> token(Tok &tokenizer, const TokenType type) const;
+    inline std::optional<Token> token(Tok &tokenizer,
+                                      const TokenType type) const;
 };
 
-class ArgsToExec
-{
+class ArgsToExec {
     typedef const char *args_array_t[];
 
     std::vector<std::string> str_owner;
     std::unique_ptr<args_array_t> args_array;
     std::size_t args_size;
 
-public:
-    explicit ArgsToExec(const SimpleCommand &cmd)
-    {
+  public:
+    explicit ArgsToExec(const SimpleCommand &cmd) {
         namespace vw = std::ranges::views;
 
         const auto &args = cmd.arguments;
@@ -226,8 +209,7 @@ public:
         this->str_owner.emplace_back(cmd.program.text());
         this->args_array[0] = this->str_owner[0].c_str();
 
-        for (size_t i{}; i < args.size(); ++i)
-        {
+        for (size_t i{}; i < args.size(); ++i) {
             auto &s = this->str_owner.emplace_back(args[i].text());
             this->args_array[i + 1] = s.c_str();
         }
@@ -236,20 +218,15 @@ public:
         this->args_array[this->args_size - 1] = nullptr;
     }
 
-    [[nodiscard]] auto args() const &
-    {
-        return &this->args_array;
-    }
+    [[nodiscard]] auto args() const & { return &this->args_array; }
 };
 
 // ----------------
 // FOMATTING
 // ----------------
 
-constexpr std::string_view to_string(const OpenKind kind)
-{
-    switch (kind)
-    {
+constexpr std::string_view to_string(const OpenKind kind) {
+    switch (kind) {
     case OpenKind::read:
         return "read";
     case OpenKind::replace:
@@ -261,11 +238,8 @@ constexpr std::string_view to_string(const OpenKind kind)
     }
 }
 
-template <>
-struct std::formatter<FileRedirect> : debug_spec
-{
-    auto format(const FileRedirect &red, auto &ctx) const
-    {
+template <> struct std::formatter<FileRedirect> : debug_spec {
+    auto format(const FileRedirect &red, auto &ctx) const {
         this->start<FileRedirect>(ctx);
         this->field("redirect_fd", red.redirect_fd, ctx);
         this->field("file_kind", to_string(red.file_kind), ctx);
@@ -274,11 +248,8 @@ struct std::formatter<FileRedirect> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<FdRedirect> : debug_spec
-{
-    auto format(const FdRedirect &red, auto &ctx) const
-    {
+template <> struct std::formatter<FdRedirect> : debug_spec {
+    auto format(const FdRedirect &red, auto &ctx) const {
         this->start<FdRedirect>(ctx);
         this->field("fd_to_replace", red.fd_to_replace, ctx);
         this->field("fd_replacer", red.fd_replacer, ctx);
@@ -286,22 +257,16 @@ struct std::formatter<FdRedirect> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<CloseFd> : debug_spec
-{
-    auto format(const CloseFd &red, auto &ctx) const
-    {
+template <> struct std::formatter<CloseFd> : debug_spec {
+    auto format(const CloseFd &red, auto &ctx) const {
         this->start<CloseFd>(ctx);
         this->field("fd", red.fd, ctx);
         return this->finish(ctx);
     }
 };
 
-template <>
-struct std::formatter<SimpleCommand> : debug_spec
-{
-    auto format(const SimpleCommand &prog, auto &ctx) const
-    {
+template <> struct std::formatter<SimpleCommand> : debug_spec {
+    auto format(const SimpleCommand &prog, auto &ctx) const {
         this->start<SimpleCommand>(ctx);
         this->field("program", prog.program, ctx);
         this->field("arguments", prog.arguments, ctx);
@@ -310,11 +275,8 @@ struct std::formatter<SimpleCommand> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<Subshell> : debug_spec
-{
-    auto format(const Subshell &subshell, auto &ctx) const
-    {
+template <> struct std::formatter<Subshell> : debug_spec {
+    auto format(const Subshell &subshell, auto &ctx) const {
         this->start<Subshell>(ctx);
         this->field("seq_list", subshell.seq_list, ctx);
         this->field("redirections", subshell.redirections, ctx);
@@ -323,15 +285,10 @@ struct std::formatter<Subshell> : debug_spec
 };
 
 template <typename T>
-concept HasChild = requires(T t) {
-    t.child;
-};
+concept HasChild = requires(T t) { t.child; };
 
-template <HasChild T>
-struct std::formatter<T> : debug_spec
-{
-    auto format(const T &node, auto &ctx) const
-    {
+template <HasChild T> struct std::formatter<T> : debug_spec {
+    auto format(const T &node, auto &ctx) const {
         this->start<T>(ctx);
         this->field("child", node.child, ctx);
         return this->finish(ctx);
@@ -344,11 +301,8 @@ concept HasLeftRight = requires(T t) {
     t.right;
 };
 
-template <HasLeftRight T>
-struct std::formatter<T> : debug_spec
-{
-    auto format(const T &node, auto &ctx) const
-    {
+template <HasLeftRight T> struct std::formatter<T> : debug_spec {
+    auto format(const T &node, auto &ctx) const {
         this->start<T>(ctx);
         this->field("left", node.left, ctx);
         this->field("right", node.right, ctx);
@@ -356,11 +310,8 @@ struct std::formatter<T> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<SimpleSubstitution> : debug_spec
-{
-    auto format(const SimpleSubstitution &subs, auto &ctx) const
-    {
+template <> struct std::formatter<SimpleSubstitution> : debug_spec {
+    auto format(const SimpleSubstitution &subs, auto &ctx) const {
         this->start<SimpleSubstitution>(ctx);
         this->field("start", subs.start, ctx);
         this->field("end", subs.end, ctx);
@@ -369,11 +320,8 @@ struct std::formatter<SimpleSubstitution> : debug_spec
     }
 };
 
-template <>
-struct std::formatter<CmdSubstitution> : debug_spec
-{
-    auto format(const CmdSubstitution &subs, auto &ctx) const
-    {
+template <> struct std::formatter<CmdSubstitution> : debug_spec {
+    auto format(const CmdSubstitution &subs, auto &ctx) const {
         this->start<CmdSubstitution>(ctx);
         this->field("start", subs.start, ctx);
         this->field("end", subs.end, ctx);

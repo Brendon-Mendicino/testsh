@@ -1,18 +1,20 @@
 #ifndef TESTSH_UTIL_H
 #define TESTSH_UTIL_H
 
+#include <cassert>
+#include <concepts>
+#include <cstdlib>
+#include <cxxabi.h>
 #include <format>
-#include <string>
-#include <string_view>
-#include <vector>
-#include <ranges>
 #include <iomanip>
 #include <memory>
 #include <optional>
-#include <cstdlib>
-#include <cxxabi.h>
-#include <cassert>
-#include <concepts>
+#include <ranges>
+#include <string>
+#include <string_view>
+#include <unistd.h>
+#include <variant>
+#include <vector>
 
 // ----------------------------------
 // DEFINES
@@ -26,61 +28,62 @@
 // ----------------------------------
 
 // helper type for the visitor
-template <class... Ts>
-struct overloads : Ts...
-{
+template <class... Ts> struct overloads : Ts... {
     using Ts::operator()...;
 };
 
 // Helper type for an optional pointer
-template <typename T>
-using optional_ptr = std::optional<std::unique_ptr<T>>;
+template <typename T> using optional_ptr = std::optional<std::unique_ptr<T>>;
 
 template <typename T, typename... Args>
-constexpr inline optional_ptr<T> make_optptr(Args &&...args)
-{
-    return std::optional<std::unique_ptr<T>>{std::make_unique<T>(std::forward<Args>(args)...)};
+constexpr inline optional_ptr<T> make_optptr(Args &&...args) {
+    return std::optional<std::unique_ptr<T>>{
+        std::make_unique<T>(std::forward<Args>(args)...)};
 }
 
-std::vector<std::string> split(const std::string &s, std::string_view delimiter);
+std::vector<std::string> split(const std::string &s,
+                               std::string_view delimiter);
 
-std::vector<std::string_view> split_sv(std::string_view s, std::string_view delimiter);
+std::vector<std::string_view> split_sv(std::string_view s,
+                                       std::string_view delimiter);
 
 template <typename T>
 concept HasFormatter =
     requires(T value, std::format_context &ctx, std::formatter<T> fmt) {
-        { fmt.format(value, ctx) } -> std::same_as<typename std::format_context::iterator>;
+        {
+            fmt.format(value, ctx)
+        } -> std::same_as<typename std::format_context::iterator>;
     };
 
 struct debug_spec;
 
 template <typename T, typename CharT = char>
-concept HasDebugFormatter = std::derived_from<std::formatter<T, CharT>, debug_spec>;
+concept HasDebugFormatter =
+    std::derived_from<std::formatter<T, CharT>, debug_spec>;
 
 struct Token;
 
 template <typename T>
-concept IsTokenizer =
-    std::copyable<T> &&
-    std::movable<T> &&
+concept IsTokenizer = std::copyable<T> && std::movable<T> &&
+                      requires(const T t) {
+                          { t.next_is_eof() } -> std::same_as<bool>;
+                          { t.peek() } -> std::same_as<std::optional<Token>>;
+                      } &&
 
-    requires(const T t) {
-        { t.next_is_eof() } -> std::same_as<bool>;
-        { t.peek() } -> std::same_as<std::optional<Token>>;
-    } &&
+                      requires(T t2) {
+                          {
+                              t2.next_token()
+                          } -> std::same_as<std::optional<Token>>;
+                      };
 
-    requires(T t2) {
-        { t2.next_token() } -> std::same_as<std::optional<Token>>;
-    };
-
-template <typename T>
-inline std::string typeid_name()
-{
+template <typename T> inline std::string typeid_name() {
     int status;
-    char *realname = abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
+    char *realname =
+        abi::__cxa_demangle(typeid(T).name(), nullptr, nullptr, &status);
 
     if (realname == nullptr || status != 0)
-        throw std::runtime_error(std::format("typeid.name retrieval failed! status={}", status));
+        throw std::runtime_error(
+            std::format("typeid.name retrieval failed! status={}", status));
 
     std::string name{realname};
 
@@ -98,40 +101,33 @@ inline std::string typeid_name()
 // ----------------------------------
 
 // helper for assigning debug format to a std::formatter
-struct debug_spec
-{
+struct debug_spec {
     bool debug = false;
     bool pretty = false;
     int spaces = 4;
 
-    constexpr void set_debug_format()
-    {
-        this->debug = true;
-    }
+    constexpr void set_debug_format() { this->debug = true; }
 
-    constexpr auto parse(auto &ctx)
-    {
+    constexpr auto parse(auto &ctx) {
         auto it = ctx.begin();
         const auto end = ctx.end();
 
-        if (*it == '#')
-        {
+        if (*it == '#') {
             this->pretty = true;
             ++it;
         }
 
-        if (*it == '?')
-        {
+        if (*it == '?') {
             this->set_debug_format();
             ++it;
-        }
-        else
-        {
-            throw std::format_error("Invalid format args. Specification must be debug {:?}");
+        } else {
+            throw std::format_error(
+                "Invalid format args. Specification must be debug {:?}");
         }
 
         if (it != end && *it != '}')
-            throw std::format_error("Invalid format args. Specification must be debug {:?}");
+            throw std::format_error(
+                "Invalid format args. Specification must be debug {:?}");
 
         return it;
     }
@@ -139,11 +135,9 @@ struct debug_spec
     // Using this method to pretty print (basically add spaces)
     // to the formatted objects.
     template <typename Formatted>
-    auto p_format(const Formatted &p, auto &ctx) const
-    {
+    auto p_format(const Formatted &p, auto &ctx) const {
         std::formatter<Formatted> fmt{*this};
-        if (this->pretty)
-        {
+        if (this->pretty) {
             fmt.spaces += 4;
         }
 
@@ -151,29 +145,22 @@ struct debug_spec
     }
 
     // Print the start of the class
-    template <typename T>
-    auto start(auto &ctx) const
-    {
+    template <typename T> auto start(auto &ctx) const {
         return std::format_to(ctx.out(), "{}(", typeid_name<T>());
     }
 
     // Print a field that is not backed by debug_spec
     template <typename Field>
-    auto field(std::string_view name, const Field &p, auto &ctx) const
-    {
-        if (this->pretty)
-        {
+    auto field(std::string_view name, const Field &p, auto &ctx) const {
+        if (this->pretty) {
             std::format_to(ctx.out(), "\n{}", std::string(this->spaces, ' '));
         }
 
         std::format_to(ctx.out(), "{}={}", name, p);
 
-        if (this->pretty)
-        {
+        if (this->pretty) {
             std::format_to(ctx.out(), ",");
-        }
-        else
-        {
+        } else {
             // WARNING: also the last item gets printed with
             std::format_to(ctx.out(), ", ");
         }
@@ -184,22 +171,17 @@ struct debug_spec
     // Print a field that is backed by debug_spec
     template <typename Field>
         requires HasDebugFormatter<Field>
-    auto field(std::string_view name, const Field &p, auto &ctx) const
-    {
-        if (this->pretty)
-        {
+    auto field(std::string_view name, const Field &p, auto &ctx) const {
+        if (this->pretty) {
             std::format_to(ctx.out(), "\n{}", std::string(this->spaces, ' '));
         }
 
         std::format_to(ctx.out(), "{}=", name);
 
-        if (this->pretty)
-        {
+        if (this->pretty) {
             this->p_format(p, ctx);
             std::format_to(ctx.out(), ",");
-        }
-        else
-        {
+        } else {
             std::format_to(ctx.out(), "{:?}", p);
             // WARNING: also the last item gets printed with
             std::format_to(ctx.out(), ", ");
@@ -209,29 +191,25 @@ struct debug_spec
     }
 
     // Print the end of the class
-    auto finish(auto &ctx) const
-    {
-        if (this->pretty)
-        {
-            std::format_to(ctx.out(), "\n{}", std::string(this->spaces - 4, ' '));
+    auto finish(auto &ctx) const {
+        if (this->pretty) {
+            std::format_to(ctx.out(), "\n{}",
+                           std::string(this->spaces - 4, ' '));
         }
 
         return std::format_to(ctx.out(), ")");
     }
 };
 
-template <size_t BUF_SIZE = 4096>
-struct fd_streambuf : std::streambuf
-{
+template <size_t BUF_SIZE = 4096> struct fd_streambuf : std::streambuf {
     int fd;
     char buf[BUF_SIZE];
 
     fd_streambuf(int fd) : fd(fd) {}
 
-protected:
-    int_type underflow() override
-    {
-        ssize_t n = ::read(fd, buf, sizeof(buf));
+  protected:
+    int_type underflow() override {
+        ssize_t n = read(fd, buf, sizeof(buf));
         if (n <= 0)
             return traits_type::eof();
         setg(buf, buf, buf + n);
@@ -276,25 +254,21 @@ protected:
 // Template variant for my types. Where the T (inner type of the vector)
 // already has debug_spec formatter.
 template <typename T, typename CharT>
-    // requires std::derived_from<
-    //     std::formatter<T, CharT>,
-    //     debug_spec>
-struct std::formatter<std::vector<T>, CharT> : debug_spec
-{
+// requires std::derived_from<
+//     std::formatter<T, CharT>,
+//     debug_spec>
+struct std::formatter<std::vector<T>, CharT> : debug_spec {
     template <typename FormatContext>
-    typename FormatContext::iterator
-    format(const std::vector<T> &vec, FormatContext &ctx) const
-    {
+    typename FormatContext::iterator format(const std::vector<T> &vec,
+                                            FormatContext &ctx) const {
         auto out = ctx.out();
         *out++ = '[';
 
-        for (size_t i = 0; i < vec.size(); ++i)
-        {
+        for (size_t i = 0; i < vec.size(); ++i) {
             this->field(std::to_string(i), vec[i], ctx);
         }
 
-        if (this->pretty && !vec.empty())
-        {
+        if (this->pretty && !vec.empty()) {
             std::format_to(out, "\n{}", std::string(this->spaces - 4, ' '));
         }
 
@@ -304,18 +278,15 @@ struct std::formatter<std::vector<T>, CharT> : debug_spec
 };
 
 template <typename T, typename CharT>
-struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
-{
+struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec {
 
     template <typename FormatContext>
-    typename FormatContext::iterator
-    format(const std::unique_ptr<T> &ptr, FormatContext &ctx) const
-    {
+    typename FormatContext::iterator format(const std::unique_ptr<T> &ptr,
+                                            FormatContext &ctx) const {
         // Reuse existing formatter for elements
         std::formatter<T, CharT> elem_fmt{*this};
 
-        if (!ptr)
-        {
+        if (!ptr) {
             return std::format_to(ctx.out(), "nullptr");
         }
 
@@ -327,15 +298,12 @@ struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec
 // template specialization for a std::variant
 // whose types already have a formatter.
 template <typename... Types>
-struct std::formatter<std::variant<Types...>> : debug_spec
-{
+struct std::formatter<std::variant<Types...>> : debug_spec {
     using VarType = std::variant<Types...>;
 
-    auto format(const VarType &v, auto &ctx) const
-    {
+    auto format(const VarType &v, auto &ctx) const {
         return std::visit(
-            [&]<HasFormatter T>(const T &p)
-            {
+            [&]<HasFormatter T>(const T &p) {
                 const std::formatter<T> fmt{*this};
                 return fmt.format(p, ctx);
             },
@@ -345,21 +313,16 @@ struct std::formatter<std::variant<Types...>> : debug_spec
 
 // template specialization for a std::optional
 template <typename T, typename CharT>
-struct std::formatter<std::optional<T>, CharT> : debug_spec
-{
+struct std::formatter<std::optional<T>, CharT> : debug_spec {
     template <typename FormatContext>
-    typename FormatContext::iterator
-    format(const std::optional<T> &ptr, FormatContext &ctx) const
-    {
+    typename FormatContext::iterator format(const std::optional<T> &ptr,
+                                            FormatContext &ctx) const {
         // Reuse existing formatter for elements
         std::formatter<T, CharT> elem_fmt{*this};
 
-        if (ptr.has_value())
-        {
+        if (ptr.has_value()) {
             return elem_fmt.format(*ptr, ctx);
-        }
-        else
-        {
+        } else {
             return std::format_to(ctx.out(), "None");
         }
     }

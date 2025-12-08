@@ -1,16 +1,15 @@
 #ifndef TESTSH_TOKENIZER_H
 #define TESTSH_TOKENIZER_H
 
-#include <string>
-#include <string_view>
+#include "util.h"
 #include <format>
 #include <optional>
-#include <utility>
 #include <span>
-#include "util.h"
+#include <string>
+#include <string_view>
+#include <utility>
 
-enum class TokenType
-{
+enum class TokenType {
     word,
     quoted_word,
     separator,
@@ -37,8 +36,7 @@ enum class TokenType
     eof,
 };
 
-struct Token
-{
+struct Token {
     // Token type
     TokenType type;
     // View of the token over the original string
@@ -51,8 +49,7 @@ struct Token
     std::string text() const;
 };
 
-struct Specification
-{
+struct Specification {
     std::string regex;
     TokenType spec_type;
 };
@@ -61,11 +58,9 @@ struct Specification
  * Use UnbufferedTokenizer to process a single line of
  * the user input.
  */
-struct UnbufferedTokenizer
-{
+struct UnbufferedTokenizer {
     std::string_view input;
     size_t string_offset = 0;
-
 
     std::optional<Token> next_token();
 
@@ -74,21 +69,20 @@ struct UnbufferedTokenizer
     std::optional<Token> peek() const;
 };
 
-struct TokState
-{
+struct TokState {
     std::span<std::string> buffered_input;
     UnbufferedTokenizer inner_tokenizer;
 };
 
-class Tokenizer
-{
+class Tokenizer {
     TokState state;
     std::optional<TokState> prev_state;
 
     Tokenizer(const TokState &state);
     void update_prev();
     bool advance_buffer();
-public:
+
+  public:
     Tokenizer(std::span<std::string> buffered_input);
 
     size_t buffer_size() const;
@@ -102,11 +96,10 @@ public:
     std::optional<Token> peek() const;
 };
 
-class TokenIter
-{
+class TokenIter {
     std::span<const Token> tokens;
 
-public:
+  public:
     TokenIter(std::span<Token> tokens);
 
     std::optional<Token> next_token();
@@ -120,10 +113,8 @@ public:
 // UTILS
 // ------------------------------------
 
-constexpr std::string_view to_string(const TokenType token)
-{
-    switch (token)
-    {
+constexpr std::string_view to_string(const TokenType token) {
+    switch (token) {
     case TokenType::word:
         return "word";
     case TokenType::separator:
@@ -177,37 +168,26 @@ constexpr std::string_view to_string(const TokenType token)
     std::unreachable();
 }
 
-template <>
-struct std::formatter<Token> : debug_spec
-{
-    auto format(const Token &token, auto &ctx) const
-    {
+template <> struct std::formatter<Token> : debug_spec {
+    auto format(const Token &token, auto &ctx) const {
         // Print regex pattern and token type
-        return std::format_to(
-            ctx.out(),
-            // TODO: compiler state is garbage...
-            // "Token(type={}, value={:?}, start={}, end={})",
-            "Token(type={}, value={}, start={}, end={})",
-            to_string(token.type),
-            token.value,
-            token.start,
-            token.end);
+        return std::format_to(ctx.out(),
+                              // TODO: compiler state is garbage...
+                              // "Token(type={}, value={:?}, start={}, end={})",
+                              "Token(type={}, value={}, start={}, end={})",
+                              to_string(token.type), token.value, token.start,
+                              token.end);
     }
 };
 
-template <>
-struct std::formatter<Specification> : debug_spec
-{
-    auto format(const Specification &spec, auto &ctx) const
-    {
+template <> struct std::formatter<Specification> : debug_spec {
+    auto format(const Specification &spec, auto &ctx) const {
         // Print regex pattern and token type
-        return std::format_to(
-            ctx.out(),
-            // TODO: compiler state is garbage...
-            // "Specification(regex={:?}, type={})",
-            "Specification(regex={}, type={})",
-            spec.regex,
-            to_string(spec.spec_type));
+        return std::format_to(ctx.out(),
+                              // TODO: compiler state is garbage...
+                              // "Specification(regex={:?}, type={})",
+                              "Specification(regex={}, type={})", spec.regex,
+                              to_string(spec.spec_type));
     }
 };
 

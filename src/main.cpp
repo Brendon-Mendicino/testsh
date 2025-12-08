@@ -1,32 +1,19 @@
-#include <complex>
-#include <string>
-#include <iostream>
-#include <print>
-#include <ostream>
-#include <vector>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <memory>
-#include <ranges>
-#include <cstring>
-#include "re2/re2.h"
-#include "syntax.h"
 #include "executor.h"
-
-namespace rng = std::ranges::views;
+#include <iostream>
+#include <ostream>
+#include <print>
+#include <sys/wait.h>
+#include <unistd.h>
 
 constexpr std::string_view red = "\033[31m";
 constexpr std::string_view reset = "\033[0m";
 
-int main()
-{
+int main() {
     TerminalState state{};
     Executor executor{};
 
-    while (true)
-    {
-        if (state.terminate_session)
-        {
+    while (true) {
+        if (state.terminate_session) {
             break;
         }
 

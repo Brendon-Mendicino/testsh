@@ -1,19 +1,17 @@
 #include "shell.h"
 #include <csignal>
-#include <cstdlib>
 #include <cstdio>
+#include <cstdlib>
 #include <print>
 
 /* Make sure the shell is running interactively as the foreground job
    before proceeding. */
-Shell::Shell()
-{
+Shell::Shell() {
     /* See if we are running interactively.  */
     terminal = STDIN_FILENO;
     is_interactive = isatty(terminal);
 
-    if (is_interactive)
-    {
+    if (is_interactive) {
         /* Loop until we are in the foreground.  */
         while (tcgetpgrp(terminal) != (pgid = getpgrp()))
             kill(-pgid, SIGTTIN);
@@ -28,8 +26,7 @@ Shell::Shell()
 
         /* Put ourselves in our own process group.  */
         pgid = getpid();
-        if (setpgid(pgid, pgid) < 0)
-        {
+        if (setpgid(pgid, pgid) < 0) {
             perror("Couldn't put the shell in its own process group");
             exit(1);
         }

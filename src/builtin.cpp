@@ -1,38 +1,28 @@
 #include "builtin.h"
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <print>
-#include <cstdio>
 #include <unistd.h>
-#include <cstdio>
-#include <cerrno>
-#include <cstring>
-#include <iostream>
-#include <cstdlib>
 
 namespace fs = std::filesystem;
 
-int builtin_cd(const SimpleCommand &cd)
-{
+int builtin_cd(const SimpleCommand &cd) {
     fs::path target{};
 
-    if (cd.arguments.empty() || cd.arguments[0].value == "~")
-    {
+    if (cd.arguments.empty() || cd.arguments[0].value == "~") {
         const char *home = std::getenv("HOME");
 
-        if (home == nullptr)
-        {
+        if (home == nullptr) {
             std::println(stderr, "cd: $HOME not set");
             return 1;
         }
 
         target = home;
-    }
-    else if (cd.arguments.size() == 1)
-    {
+    } else if (cd.arguments.size() == 1) {
         target = cd.arguments[0].text();
-    }
-    else
-    {
+    } else {
         std::println(stderr, "cd: too many arguments");
         return 1;
     }
@@ -41,8 +31,7 @@ int builtin_cd(const SimpleCommand &cd)
     std::error_code ec;
     fs::current_path(target, ec);
 
-    if (ec)
-    {
+    if (ec) {
         std::println(stderr, "cd: {}: {}", target.string(), ec.message());
         return 1;
     }
@@ -50,12 +39,10 @@ int builtin_cd(const SimpleCommand &cd)
     return 0;
 }
 
-int builtin_exec(const SimpleCommand &exec)
-{
+int builtin_exec(const SimpleCommand &exec) {
     assert(exec.program.text() == "exec");
 
-    if (exec.arguments.size() < 1)
-    {
+    if (exec.arguments.size() < 1) {
         return 0;
     }
 
@@ -63,7 +50,8 @@ int builtin_exec(const SimpleCommand &exec)
     // This makes it easier to get args to pass the the execvp()
     const SimpleCommand to_exec{
         .program = exec.arguments[0],
-        .arguments = std::vector(exec.arguments.begin() + 1, exec.arguments.end()),
+        .arguments =
+            std::vector(exec.arguments.begin() + 1, exec.arguments.end()),
     };
 
     ArgsToExec exec_feed{to_exec};
@@ -75,25 +63,20 @@ int builtin_exec(const SimpleCommand &exec)
     return retval;
 }
 
-int builtin_exit(const SimpleCommand &exit)
-{
+int builtin_exit(const SimpleCommand &exit) {
     assert(exit.program.text() == "exit");
 
-    if (exit.arguments.size() > 1)
-    {
+    if (exit.arguments.size() > 1) {
         std::println(stderr, "exit: too many arguments");
         return 1;
     }
 
     int exit_code{};
 
-    if (exit.arguments.size() == 1)
-    {
+    if (exit.arguments.size() == 1) {
         std::string tmp{exit.arguments[0].text()};
         exit_code = std::atoi(tmp.c_str());
-    }
-    else
-    {
+    } else {
         exit_code = 1;
     }
 
