@@ -1,4 +1,5 @@
 build --cxxopt='-std=c++23'
+build --cxxopt='-g'
 
 build --cxxopt=-Wall
 

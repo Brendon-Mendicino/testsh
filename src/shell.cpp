@@ -2,11 +2,11 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
-#include <print>
+#include <unistd.h>
 
 /* Make sure the shell is running interactively as the foreground job
    before proceeding. */
-Shell::Shell() {
+Shell::Shell() : pgid(), tmodes(), terminal(), is_interactive() {
     /* See if we are running interactively.  */
     terminal = STDIN_FILENO;
     is_interactive = isatty(terminal);
@@ -22,13 +22,15 @@ Shell::Shell() {
         signal(SIGTSTP, SIG_IGN);
         signal(SIGTTIN, SIG_IGN);
         signal(SIGTTOU, SIG_IGN);
-        signal(SIGCHLD, SIG_IGN);
+        // TODO: check how to handle SIGCHLD
+        // signal(SIGCHLD, SIG_IGN);
 
         /* Put ourselves in our own process group.  */
         pgid = getpid();
         if (setpgid(pgid, pgid) < 0) {
             perror("Couldn't put the shell in its own process group");
-            exit(1);
+            pgid = getpgrp();
+            // exit(1);
         }
 
         /* Grab control of the terminal.  */
@@ -36,7 +38,5 @@ Shell::Shell() {
 
         /* Save default terminal attributes for shell.  */
         tcgetattr(terminal, &tmodes);
-
-        std::println(stderr, "testsh pid: {}", pgid);
     }
 }

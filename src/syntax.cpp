@@ -3,6 +3,20 @@
 #include <cstdlib>
 
 // ------------------------------------
+// SimpleCommand
+// ------------------------------------
+
+std::string SimpleCommand::text() const {
+    std::string cmd{this->program.text()};
+
+    for (const auto &arg : this->arguments) {
+        cmd += " " + arg.text();
+    }
+
+    return cmd;
+}
+
+// ------------------------------------
 // SequentialList
 // ------------------------------------
 

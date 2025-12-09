@@ -4,8 +4,6 @@
 #include "job.h"
 #include "shell.h"
 #include "syntax.h"
-#include "tokenizer.h"
-#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -18,16 +16,18 @@ struct TerminalState {
 struct CommandState {
     std::vector<std::tuple<int, int>> redirects;
     std::vector<int> fd_to_close;
-    bool exec_async = false;
+    bool is_foreground;
+    bool inside_pipeline = false;
     // TODO: modify to optional?
     int pipeline_pgid = -1;
 
     bool initialized() const { return !redirects.empty(); }
 };
 
-class Executor {
+struct Executor {
     std::vector<std::string> input_buffer;
     Shell shell{};
+    std::vector<Job> bg_jobs;
     // TerminalState terminal_state;
 
     std::optional<ExecStats> builtin(const SimpleCommand &cmd) const;
@@ -39,6 +39,8 @@ class Executor {
     Job pipeline(const Pipeline &pipeline, const CommandState &state) const;
     ExecStats foreground_pipeline(const Pipeline &pipeline,
                                   const CommandState &state) const;
+    ExecStats background_pipeline(const Pipeline &pipeline,
+                                  const CommandState &state);
     ExecStats op_list(const OpList &list, const CommandState &state) const;
     ExecStats sequential_list(const SequentialList &sequential_list,
                               const CommandState &state) const;
@@ -58,7 +60,6 @@ class Executor {
     std::vector<std::string> process_input() const;
     ExecStats execute() const;
 
-  public:
     TerminalState update();
 };
 

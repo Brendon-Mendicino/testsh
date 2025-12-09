@@ -77,7 +77,7 @@ int builtin_exit(const SimpleCommand &exit) {
         std::string tmp{exit.arguments[0].text()};
         exit_code = std::atoi(tmp.c_str());
     } else {
-        exit_code = 1;
+        exit_code = 0;
     }
 
     std::exit(exit_code);

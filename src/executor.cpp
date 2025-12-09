@@ -1,8 +1,12 @@
 #include "executor.h"
 #include "builtin.h"
+#include "job.h"
 #include "util.h"
 #include <algorithm>
 #include <cerrno>
+#include <cpptrace/cpptrace.hpp>
+#include <csignal>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <functional>
@@ -12,7 +16,9 @@
 #include <ranges>
 #include <stdexcept>
 #include <string>
+#include <sys/wait.h>
 #include <unistd.h>
+#include <utility>
 #include <variant>
 #include <wait.h>
 
@@ -154,7 +160,12 @@ struct Waiter {
     const Shell &shell;
 
     static Job wait_job(Job &&job) {
+        // TODO: this pgid, when executing in non-interctive shell, should be
+        // equal for all the jobs
         pid_t pgid = job.pgid;
+
+        assertm((pgid != 0) || (pgid == 0 && job.completed()),
+                "A job with a pgid unitialized must be completed.");
 
         while (!job.completed()) {
             int wstatus;
@@ -178,6 +189,8 @@ struct Waiter {
 
             if (WIFSTOPPED(wstatus)) {
                 stats.stopped = true;
+                std::println(stderr, "pid={} stopped by {}({})", pid,
+                             strsignal(WSTOPSIG(wstatus)), WSTOPSIG(wstatus));
                 continue;
             }
 
@@ -222,14 +235,14 @@ struct Waiter {
     Job wait(Job &&job) const {
         Job retval;
 
-        std::println(stderr, "job: {:#?}", job);
-
         if (shell.is_interactive) {
             /* Put the job into the foreground.  */
             if (tcsetpgrp(shell.terminal, job.pgid) == -1) {
-                throw std::runtime_error(std::format("tcsetpgrp({}, {}): {}",
-                                                     shell.terminal, job.pgid,
-                                                     std::strerror(errno)));
+                // TODO: fow now don't do anything, the process might be already
+
+                // throw std::runtime_error(std::format(
+                //     "pub job in foreground: tcsetpgrp({}, {}): {}",
+                //     shell.terminal, job.pgid, std::strerror(errno)));
             }
 
             /* Send the job a continue signal, if necessary.  */
@@ -253,6 +266,7 @@ struct Waiter {
             /* Restore the shell’s terminal modes.  */
             // tcgetattr (shell_terminal, &j->tmodes);
             // tcsetattr (shell_terminal, TCSADRAIN, &shell_tmodes);
+
         } else {
             retval = Waiter::wait_job(std::move(job));
         }
@@ -264,44 +278,41 @@ struct Waiter {
 struct Spawner {
     CommandState state;
     const Shell &shell;
+    bool is_subshell = false;
 
-    template <typename Fn, typename... Args>
-    ExecStats spawn(Fn &&fn, Args &&...args) const {
-        ExecStats child = this->spawn_async(fn, args...);
-
-        // Wait for the child
-        pid_t pid = child.child_pid;
-
-        int wstatus;
-        pid_t child_wait = waitpid(pid, &wstatus, 0);
-
-        if (child_wait != pid) {
-            throw std::runtime_error(
-                std::format("wait returened an error! retval={} error={}",
-                            child_wait, std::strerror(errno)));
-        }
-
-        if (!WIFEXITED(wstatus)) {
-            throw std::runtime_error(
-                std::format("Child did not return! error={}", child_wait,
-                            std::strerror(errno)));
-        }
-
-        child.exit_code = WEXITSTATUS(wstatus);
-        child.stopped = false;
-        child.completed = true;
-
-        return child;
+  private:
+    static void command_singnal(void) {
+        /* Set the handling for job control signals back to the default.
+         */
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGCHLD, SIG_DFL);
     }
 
+    static void subshell_singnal(void) {
+        /* Set the handling for job control signals back to the default.
+         * Subshell must ignore SIGTTIN, SIGTTOU, SIGTSTP
+         */
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_IGN);
+        signal(SIGTTIN, SIG_IGN);
+        signal(SIGTTOU, SIG_IGN);
+        signal(SIGCHLD, SIG_DFL);
+    }
+
+  public:
     template <typename Fn, typename... Args>
     ExecStats spawn_async(Fn &&fn, Args &&...args) const {
         pid_t pgid = this->state.pipeline_pgid;
 
         const pid_t pid = fork();
         if (pid == -1) {
-            throw std::runtime_error(std::string("fork failed: ") +
-                                     std::strerror(errno));
+            perror("fork");
+            exit(1);
         }
 
         if (pid == 0) {
@@ -316,19 +327,21 @@ struct Spawner {
                  * potential race conditions.
                  */
                 pid_t child_pid = getpid();
-                pid_t child_gpid = (pgid != -1) ? pgid : child_pid;
+                pid_t child_pgid = (pgid != -1) ? pgid : child_pid;
 
-                setpgid(child_pid, child_gpid);
-                tcsetpgrp(shell.terminal, child_gpid);
+                setpgid(child_pid, child_pgid);
+                if (state.is_foreground) {
+                    tcsetpgrp(shell.terminal, child_pgid);
+                }
 
-                /* Set the handling for job control signals back to the default.
+                /* Set properly the signal handlers.
+                 * There is a difference if we are spwaning
+                 * a subhsell or a simple command.
                  */
-                signal(SIGINT, SIG_DFL);
-                signal(SIGQUIT, SIG_DFL);
-                signal(SIGTSTP, SIG_DFL);
-                signal(SIGTTIN, SIG_DFL);
-                signal(SIGTTOU, SIG_DFL);
-                signal(SIGCHLD, SIG_DFL);
+                if (this->is_subshell)
+                    this->subshell_singnal();
+                else
+                    this->command_singnal();
             }
 
             std::invoke(std::forward<Fn>(fn), std::forward<Args>(args)...);
@@ -341,12 +354,12 @@ struct Spawner {
 
         // Process Group ID must be set from the parent as well to avoid race
         // conditions
-        pgid = (pgid != -1) ? pgid : pid;
         if (shell.is_interactive) {
+            pgid = (pgid != -1) ? pgid : pid;
             setpgid(pid, pgid);
+        } else {
+            pgid = getpgrp();
         }
-
-        std::println(stderr, "{}, {}, {}", pid, pgid, getpgid(pid));
 
         // Don't wait for the child
         return ExecStats{
@@ -424,7 +437,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     // Check if a builtin can be run first before, before running
     // the program through exec().
     if (is_builtin(cmd)) {
-        if (state.exec_async) {
+        if (state.inside_pipeline) {
             return spawner.spawn_async(&Executor::builtin, this, cmd);
         } else {
             return this->builtin(cmd).value();
@@ -442,16 +455,10 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
         exit(1);
     };
 
-    ExecStats retval;
+    ExecStats retval = spawner.spawn_async(child);
 
-    if (state.exec_async)
-        retval = spawner.spawn_async(child);
-    else
-        retval = spawner.spawn(child);
-
-    std::println(stderr, "+ {}, {}: {:?}", retval.child_pid,
-                 retval.pipeline_pgid, cmd);
-    std::println(stderr, "retval: {:#?}", retval);
+    // std::println(stderr, "+ ({}, {}): {}", retval.child_pid,
+    //              retval.pipeline_pgid, cmd.text());
 
     return retval;
 }
@@ -489,7 +496,6 @@ Job Executor::pipeline(const Pipeline &pipeline,
     Job job{};
     pid_t pipeline_pgid = state.pipeline_pgid;
     CommandState left_state{state};
-    left_state.exec_async = true;
 
     if (pipeline.left.has_value()) {
         auto pipefd = create_pipe();
@@ -501,7 +507,7 @@ Job Executor::pipeline(const Pipeline &pipeline,
         const auto pipe_job = this->pipeline(
             **pipeline.left, {.redirects = {{STDOUT_FILENO, writer_fd}},
                               .fd_to_close = {reader_fd},
-                              .exec_async = true,
+                              .inside_pipeline = true,
                               .pipeline_pgid = pipeline_pgid});
 
         left_state.pipeline_pgid = pipe_job.pgid;
@@ -512,11 +518,6 @@ Job Executor::pipeline(const Pipeline &pipeline,
 
     // Last command of pipeline execution
     ExecStats cmd_stats = this->command(*pipeline.right, left_state);
-
-    // if (pipeline.negated)
-    // {
-    //     cmd_stats.exit_code = (cmd_stats.exit_code != 0) ? 0 : 1;
-    // }
 
     job.add(std::move(cmd_stats));
 
@@ -529,6 +530,18 @@ ExecStats Executor::foreground_pipeline(const Pipeline &pipeline,
     const auto job = Waiter{this->shell}.wait(std::move(towait));
 
     return job.exec_stats();
+}
+
+ExecStats Executor::background_pipeline(const Pipeline &pipeline,
+                                        const CommandState &state) {
+    auto job = this->pipeline(pipeline, state);
+    this->bg_jobs.emplace_back(std::move(job));
+
+    return ExecStats{
+        .exit_code = 0,
+        .child_pid = job.job_master,
+        .pipeline_pgid = job.pgid,
+    };
 }
 
 ExecStats Executor::op_list(const OpList &list,
@@ -567,7 +580,6 @@ ExecStats Executor::async_list(const AsyncList &async_list,
     }
 
     CommandState async_state{state};
-    async_state.exec_async = true;
 
     const auto stats = this->op_list(*async_list.right, async_state);
     return stats;
@@ -607,7 +619,7 @@ ExecStats Executor::subshell(const Subshell &subshell,
     // them. The unneeded files will be automatically closed when the
     // destructor will be called.
     RedirectController redirect{state};
-    Spawner spawner{state, this->shell};
+    Spawner spawner{state, this->shell, true};
 
     if (!redirect.add_redirects(subshell.redirections)) {
         return {.exit_code = 1};
@@ -619,15 +631,11 @@ ExecStats Executor::subshell(const Subshell &subshell,
 
         const auto child_status = this->list(
             *subshell.seq_list, {.pipeline_pgid = state.pipeline_pgid});
+
         exit(child_status.exit_code);
     };
 
-    ExecStats retval;
-
-    if (state.exec_async)
-        retval = spawner.spawn_async(subshell_call);
-    else
-        retval = spawner.spawn(subshell_call);
+    ExecStats retval = spawner.spawn_async(subshell_call);
 
     return retval;
 }

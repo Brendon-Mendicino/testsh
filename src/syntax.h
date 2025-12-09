@@ -5,9 +5,7 @@
 #include "util.h"
 #include <format>
 #include <memory>
-#include <print>
 #include <string_view>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -40,6 +38,8 @@ struct SimpleCommand {
     // TODO: this should be Tokens
     std::vector<Token> arguments;
     std::vector<Redirect> redirections;
+
+    std::string text() const;
 };
 
 struct AndList;
@@ -193,8 +193,6 @@ class ArgsToExec {
 
   public:
     explicit ArgsToExec(const SimpleCommand &cmd) {
-        namespace vw = std::ranges::views;
-
         const auto &args = cmd.arguments;
 
         // +1 from program

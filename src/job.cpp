@@ -10,7 +10,12 @@ bool Job::completed() const {
 }
 
 void Job::add(ExecStats &&stats) {
-    if (this->pgid == 0)
+    assertm((stats.pipeline_pgid == -1) ? (stats.completed == true) : true,
+            "A builtin is run immediatelly and not inside a child if it's not "
+            "inside a pipiline. Only builtins can have pgid=-1 and "
+            "completed=true.");
+
+    if (this->pgid == 0 && stats.pipeline_pgid != -1)
         this->pgid = stats.pipeline_pgid;
 
     this->jobs[stats.child_pid] = std::move(stats);
