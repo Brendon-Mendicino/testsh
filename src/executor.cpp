@@ -469,6 +469,16 @@ ExecStats Executor::and_list(const AndList &and_list,
                              const CommandState &state) const {
     const auto lhs = this->op_list(*and_list.left, state);
 
+    // JOB CONTROL:
+    // Don't execute tht rhs if the lhs terminated with a SIGNINT signal
+    auto sigint =
+        lhs.signaled.transform([](int signal) { return signal == SIGINT; });
+    if (sigint == true) {
+        return lhs;
+    }
+
+    // TODO: hanldle if a process got stopped
+
     // Don't execute the rhs if the lhs terminated with an error
     if (lhs.exit_code != 0) {
         return lhs;
@@ -482,6 +492,14 @@ ExecStats Executor::and_list(const AndList &and_list,
 ExecStats Executor::or_list(const OrList &or_list,
                             const CommandState &state) const {
     const auto lhs = this->op_list(*or_list.left, state);
+
+    // JOB CONTROL:
+    // Don't execute tht rhs if the lhs terminated with a SIGNINT signal
+    auto sigint =
+        lhs.signaled.transform([](int signal) { return signal == SIGINT; });
+    if (sigint == true) {
+        return lhs;
+    }
 
     // Don't execute the rhs if the lhs terminated with a success
     if (lhs.exit_code == 0) {
@@ -530,8 +548,6 @@ ExecStats Executor::foreground_pipeline(const Pipeline &pipeline,
                                         const CommandState &state) const {
     auto towait = this->pipeline(pipeline, state);
     const auto job = Waiter{this->shell}.wait(std::move(towait));
-
-    std::println(stderr, "waited job={:#?}", job);
 
     auto stats = job.exec_stats();
 
