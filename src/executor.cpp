@@ -167,7 +167,7 @@ struct Waiter {
         assertm((pgid != 0) || (pgid == 0 && job.completed()),
                 "A job with a pgid unitialized must be completed.");
 
-        while (!job.completed()) {
+        while (!job.completed() && !job.stopped()) {
             int wstatus;
             const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED);
             if (pid == -1) {
@@ -189,7 +189,7 @@ struct Waiter {
 
             if (WIFSTOPPED(wstatus)) {
                 stats.stopped = true;
-                std::println(stderr, "pid={} stopped by {}({})", pid,
+                std::println(stderr, "{}: stopped by {}({})", pid,
                              strsignal(WSTOPSIG(wstatus)), WSTOPSIG(wstatus));
                 continue;
             }
@@ -199,7 +199,7 @@ struct Waiter {
             if (WIFEXITED(wstatus)) {
                 stats.exit_code = WEXITSTATUS(wstatus);
             } else if (WIFSIGNALED(wstatus)) {
-                stats.exit_code = 0;
+                stats.exit_code = 1;
                 std::println(stderr, "{}: Terminated by signal {}({})", pid,
                              strsignal(WTERMSIG(wstatus)), WTERMSIG(wstatus));
             }

@@ -17,6 +17,19 @@ bool Job::completed() const {
     return true;
 }
 
+/**
+ * Returns true if all the jobs are either stopped or
+ * completed.
+ */
+bool Job::stopped() const {
+    for (const auto &entry : this->jobs) {
+        if (!entry.second.completed && !entry.second.stopped)
+            return false;
+    }
+
+    return true;
+}
+
 void Job::add(ExecStats &&stats) {
     assertm(
         (stats.pipeline_pgid == -1) ? (stats.completed == true) : true,

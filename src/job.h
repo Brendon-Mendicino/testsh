@@ -30,6 +30,8 @@ struct Job {
 
     bool completed() const;
 
+    bool stopped() const;
+
     void add(ExecStats &&stats);
 
     ExecStats exec_stats() const;
