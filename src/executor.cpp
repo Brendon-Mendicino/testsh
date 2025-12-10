@@ -431,7 +431,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     Spawner spawner{state, this->shell};
 
     if (!redirect.add_redirects(cmd.redirections)) {
-        return {.exit_code = 1};
+        return ExecStats::ERROR;
     }
 
     // Check if a builtin can be run first before, before running
@@ -529,7 +529,13 @@ ExecStats Executor::foreground_pipeline(const Pipeline &pipeline,
     auto towait = this->pipeline(pipeline, state);
     const auto job = Waiter{this->shell}.wait(std::move(towait));
 
-    return job.exec_stats();
+    auto stats = job.exec_stats();
+
+    if (pipeline.negated) {
+        stats.exit_code = (stats.exit_code != 0) ? 0 : 1;
+    }
+
+    return stats;
 }
 
 ExecStats Executor::background_pipeline(const Pipeline &pipeline,

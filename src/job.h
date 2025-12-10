@@ -12,6 +12,8 @@ struct ExecStats {
     pid_t pipeline_pgid = -1;
     bool completed = false;
     bool stopped = false;
+
+    static ExecStats ERROR;
 };
 
 /**
