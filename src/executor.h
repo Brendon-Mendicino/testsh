@@ -24,6 +24,11 @@ struct CommandState {
     bool initialized() const { return !redirects.empty(); }
 };
 
+struct ListStats {
+    ExecStats last_stats;
+    std::vector<Job> bg_jobs;
+};
+
 struct Executor {
     std::vector<std::string> input_buffer;
     Shell shell{};
@@ -37,30 +42,29 @@ struct Executor {
                        const CommandState &state) const;
     ExecStats or_list(const OrList &or_list, const CommandState &state) const;
     Job pipeline(const Pipeline &pipeline, const CommandState &state) const;
-    ExecStats foreground_pipeline(const Pipeline &pipeline,
-                                  const CommandState &state) const;
-    ExecStats background_pipeline(const Pipeline &pipeline,
-                                  const CommandState &state);
+    ExecStats wait_pipeline(const Pipeline &pipeline,
+                            const CommandState &state) const;
     ExecStats op_list(const OpList &list, const CommandState &state) const;
-    ExecStats sequential_list(const SequentialList &sequential_list,
+    ListStats sequential_list(const SequentialList &sequential_list,
                               const CommandState &state) const;
-    ExecStats async_list(const AsyncList &async_list,
+    ListStats async_list(const AsyncList &async_list,
                          const CommandState &state) const;
-    ExecStats list(const List &list, const CommandState &state) const;
+    ListStats list(const List &list, const CommandState &state) const;
     ExecStats command(const Command &command, const CommandState &state) const;
     ExecStats subshell(const Subshell &subshell,
                        const CommandState &state) const;
-    ExecStats program(const ThisProgram &program) const;
+    ExecStats program(const ThisProgram &program);
 
     bool line_has_continuation() const;
     bool read_stdin();
-    std::string simple_substitution(const SimpleSubstitution &prog) const;
-    std::string cmd_substitution(const CmdSubstitution &cmd) const;
-    void substitution_run(std::vector<std::string> &support) const;
-    std::vector<std::string> process_input() const;
-    ExecStats execute() const;
+    std::string simple_substitution(const SimpleSubstitution &prog);
+    std::string cmd_substitution(const CmdSubstitution &cmd);
+    void substitution_run(std::vector<std::string> &support);
+    std::vector<std::string> process_input();
+    ExecStats execute();
 
     TerminalState update();
+    void loop();
 };
 
 #endif // TESTSH_EXECUTOR_H

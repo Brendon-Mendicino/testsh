@@ -1,7 +1,6 @@
 #include "shell.h"
 #include <csignal>
 #include <cstdio>
-#include <cstdlib>
 #include <unistd.h>
 
 /* Make sure the shell is running interactively as the foreground job

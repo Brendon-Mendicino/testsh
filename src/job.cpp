@@ -1,4 +1,5 @@
 #include "job.h"
+#include <optional>
 
 ExecStats ExecStats::ERROR = {
     .exit_code = 1,
@@ -6,6 +7,8 @@ ExecStats ExecStats::ERROR = {
     .pipeline_pgid = -1,
     .completed = true,
     .stopped = false,
+    .in_background = false,
+    .signaled = std::nullopt,
 };
 
 bool Job::completed() const {

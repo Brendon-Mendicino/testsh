@@ -13,7 +13,8 @@ struct ExecStats {
     pid_t pipeline_pgid = -1;
     bool completed = false;
     bool stopped = false;
-    std::optional<int> signaled = {};
+    bool in_background = false;
+    std::optional<int> signaled = std::nullopt;
 
     static ExecStats ERROR;
 };

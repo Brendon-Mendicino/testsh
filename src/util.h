@@ -22,28 +22,15 @@
 #define assertm(exp, msg) assert((void(msg), exp))
 
 // ----------------------------------
-// HELPERS
+// CONSTANTS
 // ----------------------------------
+//
+constexpr std::string_view red = "\033[31m";
+constexpr std::string_view reset = "\033[0m";
 
-// helper type for the visitor
-template <class... Ts> struct overloads : Ts... {
-    using Ts::operator()...;
-};
-
-// Helper type for an optional pointer
-template <typename T> using optional_ptr = std::optional<std::unique_ptr<T>>;
-
-template <typename T, typename... Args>
-constexpr inline optional_ptr<T> make_optptr(Args &&...args) {
-    return std::optional<std::unique_ptr<T>>{
-        std::make_unique<T>(std::forward<Args>(args)...)};
-}
-
-std::vector<std::string> split(const std::string &s,
-                               std::string_view delimiter);
-
-std::vector<std::string_view> split_sv(std::string_view s,
-                                       std::string_view delimiter);
+// ----------------------------------
+// CONCEPTS
+// ----------------------------------
 
 template <typename T>
 concept HasFormatter =
@@ -73,6 +60,30 @@ concept IsTokenizer = std::copyable<T> && std::movable<T> &&
                               t2.next_token()
                           } -> std::same_as<std::optional<Token>>;
                       };
+
+// Helper type for an optional pointer
+template <typename T> using optional_ptr = std::optional<std::unique_ptr<T>>;
+
+// ----------------------------------
+// HELPERS
+// ----------------------------------
+
+// helper type for the visitor
+template <class... Ts> struct overloads : Ts... {
+    using Ts::operator()...;
+};
+
+template <typename T, typename... Args>
+constexpr inline optional_ptr<T> make_optptr(Args &&...args) {
+    return std::optional<std::unique_ptr<T>>{
+        std::make_unique<T>(std::forward<Args>(args)...)};
+}
+
+std::vector<std::string> split(const std::string &s,
+                               std::string_view delimiter);
+
+std::vector<std::string_view> split_sv(std::string_view s,
+                                       std::string_view delimiter);
 
 template <typename T> inline std::string typeid_name() {
     int status;
