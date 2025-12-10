@@ -200,6 +200,8 @@ struct Waiter {
                 stats.exit_code = WEXITSTATUS(wstatus);
             } else if (WIFSIGNALED(wstatus)) {
                 stats.exit_code = 1;
+                stats.signaled = WTERMSIG(wstatus);
+
                 std::println(stderr, "{}: Terminated by signal {}({})", pid,
                              strsignal(WTERMSIG(wstatus)), WTERMSIG(wstatus));
             }
@@ -528,6 +530,8 @@ ExecStats Executor::foreground_pipeline(const Pipeline &pipeline,
                                         const CommandState &state) const {
     auto towait = this->pipeline(pipeline, state);
     const auto job = Waiter{this->shell}.wait(std::move(towait));
+
+    std::println(stderr, "waited job={:#?}", job);
 
     auto stats = job.exec_stats();
 

@@ -3,6 +3,7 @@
 
 #include "util.h"
 #include <format>
+#include <optional>
 #include <sys/types.h>
 #include <unordered_map>
 
@@ -12,6 +13,7 @@ struct ExecStats {
     pid_t pipeline_pgid = -1;
     bool completed = false;
     bool stopped = false;
+    std::optional<int> signaled = {};
 
     static ExecStats ERROR;
 };
@@ -49,6 +51,7 @@ template <> struct std::formatter<ExecStats> : debug_spec {
         this->field("pipeline_pgid", e.pipeline_pgid, ctx);
         this->field("completed", e.completed, ctx);
         this->field("stopped", e.stopped, ctx);
+        this->field("signaled", e.signaled, ctx);
         return this->finish(ctx);
     }
 };

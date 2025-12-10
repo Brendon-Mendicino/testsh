@@ -130,10 +130,25 @@ struct debug_spec {
         return it;
     }
 
+    template <typename T, typename CharT = char>
+    inline auto iformat(const T &t, auto &ctx) const {
+        std::formatter<T, CharT> fmt{};
+
+        return fmt.format(t, ctx);
+    }
+
+    template <typename T, typename CharT = char>
+        requires HasDebugFormatter<T, CharT>
+    inline auto iformat(const T &t, auto &ctx) const {
+        std::formatter<T, CharT> fmt{*this};
+
+        return fmt.format(t, ctx);
+    }
+
     // Using this method to pretty print (basically add spaces)
     // to the formatted objects.
     template <typename Formatted>
-    auto p_format(const Formatted &p, auto &ctx) const {
+    inline auto p_format(const Formatted &p, auto &ctx) const {
         std::formatter<Formatted> fmt{*this};
         if (this->pretty) {
             fmt.spaces += 4;
@@ -215,46 +230,9 @@ template <size_t BUF_SIZE = 4096> struct fd_streambuf : std::streambuf {
     }
 };
 
-// template <typename T, typename CharT>
-// struct std::formatter<std::vector<T>, CharT>
-// {
-//     // Reuse existing formatter for elements
-//     std::formatter<T, CharT> elem_fmt;
-
-//     // parse optional format specifiers (forward to element formatter)
-//     constexpr auto parse(std::basic_format_parse_context<CharT> &ctx)
-//     {
-//         return elem_fmt.parse(ctx);
-//     }
-
-//     template <typename FormatContext>
-//     typename FormatContext::iterator
-//     format(const std::vector<T> &vec, FormatContext &ctx) const
-//     {
-//         auto out = ctx.out();
-//         *out++ = '[';
-
-//         for (size_t i = 0; i < vec.size(); ++i)
-//         {
-//             out = elem_fmt.format(vec[i], ctx);
-//             if (i + 1 < vec.size())
-//             {
-//                 *out++ = ',';
-//                 *out++ = ' ';
-//             }
-//         }
-
-//         *out++ = ']';
-//         return out;
-//     }
-// };
-
 // Template variant for my types. Where the T (inner type of the vector)
 // already has debug_spec formatter.
 template <typename T, typename CharT>
-// requires std::derived_from<
-//     std::formatter<T, CharT>,
-//     debug_spec>
 struct std::formatter<std::vector<T>, CharT> : debug_spec {
     template <typename FormatContext>
     typename FormatContext::iterator format(const std::vector<T> &vec,
@@ -281,15 +259,12 @@ struct std::formatter<std::unique_ptr<T>, CharT> : debug_spec {
     template <typename FormatContext>
     typename FormatContext::iterator format(const std::unique_ptr<T> &ptr,
                                             FormatContext &ctx) const {
-        // Reuse existing formatter for elements
-        std::formatter<T, CharT> elem_fmt{*this};
-
         if (!ptr) {
             return std::format_to(ctx.out(), "nullptr");
         }
 
         const T &elem = *ptr;
-        return elem_fmt.format(elem, ctx);
+        return this->iformat(elem, ctx);
     }
 };
 
@@ -315,11 +290,8 @@ struct std::formatter<std::optional<T>, CharT> : debug_spec {
     template <typename FormatContext>
     typename FormatContext::iterator format(const std::optional<T> &ptr,
                                             FormatContext &ctx) const {
-        // Reuse existing formatter for elements
-        std::formatter<T, CharT> elem_fmt{*this};
-
         if (ptr.has_value()) {
-            return elem_fmt.format(*ptr, ctx);
+            return this->iformat(*ptr, ctx);
         } else {
             return std::format_to(ctx.out(), "None");
         }
