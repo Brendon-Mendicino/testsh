@@ -2,8 +2,6 @@
 #define TESTSH_BUILTIN_H
 
 #include "syntax.h"
-#include <string_view>
-#include <vector>
 
 // TODO: modify
 int builtin_cd(const SimpleCommand &cd);

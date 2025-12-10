@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <cpptrace/cpptrace.hpp>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
@@ -288,12 +289,6 @@ struct Waiter {
     }
 };
 
-enum class SpawnType {
-    command,
-    subshell,
-    async_list,
-};
-
 struct Spawner {
     CommandState state;
     const Shell &shell;
@@ -397,15 +392,25 @@ struct Spawner {
         // Process Group ID must be set from the parent as well to avoid
         // race conditions
         if (shell.is_interactive) {
+            int retval{};
             pgid = (pgid != -1) ? pgid : pid;
 
-            setpgid(pid, pgid);
+            retval = setpgid(pid, pgid);
+            if (retval == -1) {
+                std::println(stderr, "{}: setpgid({}, {}): {}", __FUNCTION__,
+                             pid, pgid, std::strerror(errno));
+            }
 
             /* Put job in foreground */
             if (state.is_foreground &&
                 this->spawn_type != SpawnType::async_list) {
 
-                tcsetpgrp(shell.terminal, pgid);
+                retval = tcsetpgrp(shell.terminal, pgid);
+                if (retval == -1) {
+                    std::println(stderr, "{}: tcsetpgrp({}, {}): {}",
+                                 __FUNCTION__, shell.terminal, pgid,
+                                 std::strerror(errno));
+                }
             }
         } else {
             pgid = getpgrp();

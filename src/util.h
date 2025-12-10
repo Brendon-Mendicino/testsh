@@ -309,4 +309,30 @@ struct std::formatter<std::optional<T>, CharT> : debug_spec {
     }
 };
 
+// TODO: fix tuple formatter
+//
+// template <typename... Args, typename CharT>
+// struct std::formatter<std::tuple<Args...>, CharT> : debug_spec {
+//     auto format(const std::tuple<Args...> &t, auto &ctx) {
+//         auto out = ctx.out();
+//         *out++ = '(';
+//
+//         std::size_t index = 0;
+//
+//         // Expand the tuple elements one by one
+//         std::apply(
+//             [&](auto const &...elems) {
+//                 ((this->field(std::to_string(index++), elems, ctx)), ...);
+//             },
+//             t);
+//
+//         if (this->pretty && sizeof...(Args) > 0) {
+//             std::format_to(out, "\n{}", std::string(this->spaces - 4, ' '));
+//         }
+//
+//         *out++ = ')';
+//         return out;
+//     }
+// };
+
 #endif // TESTSH_UTIL_H

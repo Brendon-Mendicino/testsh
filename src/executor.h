@@ -4,8 +4,18 @@
 #include "job.h"
 #include "shell.h"
 #include "syntax.h"
+#include "util.h"
+#include <format>
+#include <string_view>
 #include <tuple>
 #include <vector>
+
+enum class SpawnType {
+    command,
+    subshell,
+    async_list,
+
+};
 
 struct TerminalState {
     bool terminate_session;
@@ -14,9 +24,9 @@ struct TerminalState {
 };
 
 struct CommandState {
-    std::vector<std::tuple<int, int>> redirects;
-    std::vector<int> fd_to_close;
-    bool is_foreground;
+    std::vector<std::tuple<int, int>> redirects{};
+    std::vector<int> fd_to_close{};
+    bool is_foreground = true;
     bool inside_pipeline = false;
     // TODO: modify to optional?
     int pipeline_pgid = -1;
@@ -65,6 +75,40 @@ struct Executor {
 
     TerminalState update();
     void loop();
+};
+
+// ------------------------------------
+// FORMATTER
+// ------------------------------------
+
+constexpr std::string_view to_string(const SpawnType &t) {
+    switch (t) {
+    case SpawnType::command:
+        return "command";
+    case SpawnType::subshell:
+        return "subshell";
+    case SpawnType::async_list:
+        return "async_list";
+    }
+}
+
+template <typename CharT> struct std::formatter<SpawnType, CharT> : debug_spec {
+    auto format(const SpawnType &s, auto &ctx) const {
+        return std::format_to(ctx.out(), "{}", to_string(s));
+    }
+};
+
+template <typename CharT>
+struct std::formatter<CommandState, CharT> : debug_spec {
+    auto format(const CommandState &c, auto &ctx) const {
+        this->start<CommandState>(ctx);
+        this->field("redirects", c.redirects, ctx);
+        this->field("fd_to_close", c.fd_to_close, ctx);
+        this->field("is_foreground", c.is_foreground, ctx);
+        this->field("inside_pipeline", c.inside_pipeline, ctx);
+        this->field("pipeline_pgid", c.pipeline_pgid, ctx);
+        return this->finish(ctx);
+    }
 };
 
 #endif // TESTSH_EXECUTOR_H
