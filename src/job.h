@@ -1,10 +1,12 @@
 #ifndef TESTSH_JOB_H
 #define TESTSH_JOB_H
 
+#include "shell.h"
 #include "util.h"
 #include <format>
 #include <optional>
 #include <sys/types.h>
+#include <termios.h>
 #include <unordered_map>
 
 struct ExecStats {
@@ -30,14 +32,29 @@ struct Job {
     pid_t pgid;
     std::unordered_map<pid_t, ExecStats> jobs;
     pid_t job_master;
+    termios tmodes;
+    bool tmodes_init = false;
 
     bool completed() const;
 
+    /**
+     * Returns true if all the jobs are either stopped or
+     * completed.
+     */
     bool stopped() const;
+
+    /**
+     * Mark all programs of a job as running (stopped=false)
+     */
+    void mark_running();
 
     void add(ExecStats &&stats);
 
     ExecStats exec_stats() const;
+
+    void set_modes(const Shell &shell);
+
+    void restore_modes(const Shell &shell);
 };
 
 // -------------------------------------

@@ -8,6 +8,21 @@
 
 namespace fs = std::filesystem;
 
+int builtin_bg(const SimpleCommand &bg, std::vector<Job> &jobs,
+               const Waiter &waiter) {
+
+    if (jobs.empty()) {
+        std::println(stderr, "bg: no jobs to resume in background");
+        return 1;
+    }
+
+    auto &job = jobs[jobs.size() - 1];
+
+    waiter.bg(job);
+
+    return 0;
+}
+
 int builtin_cd(const SimpleCommand &cd) {
     fs::path target{};
 
@@ -81,4 +96,31 @@ int builtin_exit(const SimpleCommand &exit) {
     }
 
     std::exit(exit_code);
+}
+
+int builtin_fg(const SimpleCommand &fg, std::vector<Job> &jobs,
+               const Waiter &waiter) {
+
+    if (jobs.empty()) {
+        std::println(stderr, "bg: no jobs to resume in background");
+        return 1;
+    }
+
+    auto &job = jobs[jobs.size() - 1];
+
+    waiter.fg(job);
+
+    return 0;
+}
+
+int builtin_jobs(const SimpleCommand &jobs, const std::vector<Job> &bg_jobs) {
+    std::println("=== JOBS ===");
+    for (const auto &job : bg_jobs) {
+        const auto state = job.stopped() ? "Stopped" : "Backgournd";
+
+        std::println("{}: Job state={}", job.pgid, state);
+    }
+    std::println();
+
+    return 0;
 }

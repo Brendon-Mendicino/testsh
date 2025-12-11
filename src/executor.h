@@ -42,27 +42,25 @@ struct ListStats {
 struct Executor {
     std::vector<std::string> input_buffer;
     Shell shell{};
-    std::vector<Job> bg_jobs;
+    std::vector<Job> bg_jobs{};
     // TerminalState terminal_state;
 
-    std::optional<ExecStats> builtin(const SimpleCommand &cmd) const;
+    std::optional<ExecStats> builtin(const SimpleCommand &cmd);
     ExecStats simple_command(const SimpleCommand &cmd,
-                             const CommandState &state) const;
-    ExecStats and_list(const AndList &and_list,
-                       const CommandState &state) const;
-    ExecStats or_list(const OrList &or_list, const CommandState &state) const;
-    Job pipeline(const Pipeline &pipeline, const CommandState &state) const;
+                             const CommandState &state);
+    ExecStats and_list(const AndList &and_list, const CommandState &state);
+    ExecStats or_list(const OrList &or_list, const CommandState &state);
+    Job pipeline(const Pipeline &pipeline, const CommandState &state);
     ExecStats wait_pipeline(const Pipeline &pipeline,
-                            const CommandState &state) const;
-    ExecStats op_list(const OpList &list, const CommandState &state) const;
+                            const CommandState &state);
+    ExecStats op_list(const OpList &list, const CommandState &state);
     ListStats sequential_list(const SequentialList &sequential_list,
-                              const CommandState &state) const;
+                              const CommandState &state);
     ListStats async_list(const AsyncList &async_list,
-                         const CommandState &state) const;
-    ListStats list(const List &list, const CommandState &state) const;
-    ExecStats command(const Command &command, const CommandState &state) const;
-    ExecStats subshell(const Subshell &subshell,
-                       const CommandState &state) const;
+                         const CommandState &state);
+    ListStats list(const List &list, const CommandState &state);
+    ExecStats command(const Command &command, const CommandState &state);
+    ExecStats subshell(const Subshell &subshell, const CommandState &state);
     ExecStats program(const ThisProgram &program);
 
     bool line_has_continuation() const;
@@ -75,6 +73,18 @@ struct Executor {
 
     TerminalState update();
     void loop();
+};
+
+struct Waiter {
+    const Shell &shell;
+
+    static void process_wstatus(Job &job, pid_t pid, int wstatus);
+    static Job wait_job(Job &&job);
+    static void update_status(Job &job);
+
+    void wait(Job &job) const;
+    void bg(Job &job) const;
+    void fg(Job &job) const;
 };
 
 // ------------------------------------

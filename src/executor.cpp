@@ -159,135 +159,147 @@ class RedirectController {
     }
 };
 
-struct Waiter {
-    const Shell &shell;
+// ------------------------------------
+// Waiter
+// ------------------------------------
 
-    static void process_wstatus(Job &job, pid_t pid, int wstatus) {
-        assertm(pid != 0,
-                "A pid=0 likely means a return from waitpid(...,WNOHANG) no "
-                "signal was received from any child");
+void Waiter::process_wstatus(Job &job, pid_t pid, int wstatus) {
+    assertm(pid != 0,
+            "A pid=0 likely means a return from waitpid(...,WNOHANG) no "
+            "signal was received from any child");
 
-        pid_t pgid = job.pgid;
+    pid_t pgid = job.pgid;
 
-        if (pid == -1) {
-            throw std::runtime_error(std::format("wait_job: waitpid({}): {}",
-                                                 -pgid, std::strerror(errno)));
-        }
-
-        if (!job.jobs.contains(pid)) {
-            throw std::runtime_error(
-                std::format("pid={} is not part of pgid={}", pid, pgid));
-        }
-
-        auto &stats = job.jobs.at(pid);
-
-        if (WIFSTOPPED(wstatus)) {
-            stats.stopped = true;
-            std::println(stderr, "{}: stopped by {}({})", pid,
-                         strsignal(WSTOPSIG(wstatus)), WSTOPSIG(wstatus));
-            return;
-        }
-
-        stats.completed = true;
-
-        if (WIFEXITED(wstatus)) {
-            stats.exit_code = WEXITSTATUS(wstatus);
-        } else if (WIFSIGNALED(wstatus)) {
-            stats.exit_code = 1;
-            stats.signaled = WTERMSIG(wstatus);
-
-            std::println(stderr, "{}: Terminated by signal {}({})", pid,
-                         strsignal(WTERMSIG(wstatus)), WTERMSIG(wstatus));
-        }
+    if (pid == -1) {
+        throw std::runtime_error(std::format("wait_job: waitpid({}): {}", -pgid,
+                                             std::strerror(errno)));
     }
 
-    static Job wait_job(Job &&job) {
-        // TODO: this pgid, when executing in non-interctive shell, should be
-        // equal for all the jobs
-        pid_t pgid = job.pgid;
-
-        assertm((pgid != 0) || (pgid == 0 && job.completed()),
-                "A job with a pgid unitialized must be completed.");
-
-        while (!job.completed() && !job.stopped()) {
-            int wstatus;
-            const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED);
-
-            process_wstatus(job, pid, wstatus);
-        }
-
-        return job;
+    if (!job.jobs.contains(pid)) {
+        throw std::runtime_error(
+            std::format("pid={} is not part of pgid={}", pid, pgid));
     }
 
-    static void update_status(Job &job) {
-        // TODO: this pgid, when executing in non-interctive shell, should
-        // be equal for all the jobs
-        pid_t pgid = job.pgid;
+    auto &stats = job.jobs.at(pid);
 
-        assertm((pgid != 0) || (pgid == 0 && job.completed()),
-                "A job with a pgid unitialized must be completed.");
-
-        for (;;) {
-            int wstatus;
-            const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED | WNOHANG);
-
-            if (pid == 0) {
-                /* No processes ready to report.  */
-                break;
-            }
-
-            if (pid == -1 && errno == ECHILD) {
-                /* No processes ready to report.  */
-                break;
-            }
-
-            process_wstatus(job, pid, wstatus);
-        }
+    if (WIFSTOPPED(wstatus)) {
+        stats.stopped = true;
+        std::println(stderr, "{}: stopped by {}({})", pid,
+                     strsignal(WSTOPSIG(wstatus)), WSTOPSIG(wstatus));
+        return;
     }
 
-    Job wait(Job &&job) const {
-        Job retval;
+    stats.completed = true;
 
-        if (shell.is_interactive) {
-            /* Put the job into the foreground.  */
-            // if (tcsetpgrp(shell.terminal, job.pgid) == -1) {
-            //  TODO: fow now don't do anything, the process might be
-            //  already
+    if (WIFEXITED(wstatus)) {
+        stats.exit_code = WEXITSTATUS(wstatus);
+    } else if (WIFSIGNALED(wstatus)) {
+        stats.exit_code = 1;
+        stats.signaled = WTERMSIG(wstatus);
 
-            // throw std::runtime_error(std::format(
-            //     "pub job in foreground: tcsetpgrp({}, {}): {}",
-            //     shell.terminal, job.pgid, std::strerror(errno)));
-            //}
+        std::println(stderr, "{}: Terminated by signal {}({})", pid,
+                     strsignal(WTERMSIG(wstatus)), WTERMSIG(wstatus));
+    }
+}
 
-            /* Send the job a continue signal, if necessary.  */
-            // if (cont)
-            // {
-            //     tcsetattr(shell_terminal, TCSADRAIN, &j->tmodes);
-            //     if (kill(-j->pgid, SIGCONT) < 0)
-            //         perror("kill (SIGCONT)");
-            // }
+Job Waiter::wait_job(Job &&job) {
+    // TODO: this pgid, when executing in non-interctive shell, should be
+    // equal for all the jobs
+    pid_t pgid = job.pgid;
 
-            /* Wait for it to report.  */
-            retval = Waiter::wait_job(std::move(job));
+    assertm((pgid != 0) || (pgid == 0 && job.completed()),
+            "A job with a pgid unitialized must be completed.");
 
-            /* Put the shell back in the foreground.  */
-            if (tcsetpgrp(shell.terminal, shell.pgid) == -1) {
-                throw std::runtime_error(std::format("tcsetpgrp({}, {}): {}",
-                                                     shell.terminal, shell.pgid,
-                                                     std::strerror(errno)));
-            }
+    while (!job.completed() && !job.stopped()) {
+        int wstatus;
+        const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED);
 
-            /* Restore the shell’s terminal modes.  */
-            // tcgetattr (shell_terminal, &j->tmodes);
-            // tcsetattr (shell_terminal, TCSADRAIN, &shell_tmodes);
+        process_wstatus(job, pid, wstatus);
+    }
 
-        } else {
-            retval = Waiter::wait_job(std::move(job));
+    return job;
+}
+
+void Waiter::update_status(Job &job) {
+    // TODO: this pgid, when executing in non-interctive shell, should
+    // be equal for all the jobs
+    pid_t pgid = job.pgid;
+
+    assertm((pgid != 0) || (pgid == 0 && job.completed()),
+            "A job with a pgid unitialized must be completed.");
+
+    for (;;) {
+        int wstatus;
+        const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED | WNOHANG);
+
+        if (pid == 0) {
+            /* No processes ready to report.  */
+            break;
         }
 
-        return retval;
+        if (pid == -1 && errno == ECHILD) {
+            /* No processes ready to report.  */
+            break;
+        }
+
+        process_wstatus(job, pid, wstatus);
     }
-};
+}
+
+void Waiter::wait(Job &job) const {
+    Job retval;
+
+    if (shell.is_interactive) {
+        /* Wait for it to report.  */
+        retval = Waiter::wait_job(std::move(job));
+
+        /* Put the shell back in the foreground.  */
+        if (tcsetpgrp(shell.terminal, shell.pgid) == -1) {
+            std::println(stderr, "tcsetpgrp({}, {}): {}", shell.terminal,
+                         shell.pgid, std::strerror(errno));
+        }
+
+        /* Restore the shell’s terminal modes.  */
+        job.set_modes(shell);
+        tcsetattr(shell.terminal, TCSADRAIN, &shell.tmodes);
+    } else {
+        retval = Waiter::wait_job(std::move(job));
+    }
+
+    job = retval;
+}
+
+void Waiter::bg(Job &job) const {
+    if (kill(-job.pgid, SIGCONT) < 0) {
+        std::println(stderr, "kill({}, SIGCONG): {}", -job.pgid,
+                     std::strerror(errno));
+    }
+
+    // TODO: error handling?
+    job.mark_running();
+}
+
+void Waiter::fg(Job &job) const {
+    /* Put the job in foreground */
+    tcsetpgrp(shell.terminal, job.pgid);
+
+    /* Restore the tmodes on the terminal before sening SIGCONT */
+    job.restore_modes(shell);
+
+    if (kill(-job.pgid, SIGCONT) < 0) {
+        std::println(stderr, "kill({}, SIGCONT): {}", -job.pgid,
+                     std::strerror(errno));
+    }
+
+    // TODO: error handling?
+    job.mark_running();
+
+    this->wait(job);
+}
+
+// ------------------------------------
+// Spawner
+// ------------------------------------
 
 struct Spawner {
     CommandState state;
@@ -444,27 +456,27 @@ static std::tuple<int, int> create_pipe() {
 
 static bool is_builtin(const SimpleCommand &cmd) {
     const auto prog = cmd.program.text();
-    bool retval = false;
 
-    if (prog == "cd")
-        retval = true;
-    else if (prog == "exec")
-        retval = true;
-    else if (prog == "exit")
-        retval = true;
-
-    return retval;
+    return prog == "bg" || prog == "cd" || prog == "exec" || prog == "exit" ||
+           prog == "fg" || prog == "jobs";
 }
 
-std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const {
+std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) {
+    const auto prog = cmd.program.text();
     int exit_code{};
 
-    if (cmd.program.text() == "cd") {
+    if (prog == "bg") {
+        exit_code = builtin_bg(cmd, this->bg_jobs, Waiter(shell));
+    } else if (prog == "cd") {
         exit_code = builtin_cd(cmd);
-    } else if (cmd.program.text() == "exec") {
+    } else if (prog == "exec") {
         exit_code = builtin_exec(cmd);
-    } else if (cmd.program.text() == "exit") {
+    } else if (prog == "exit") {
         exit_code = builtin_exit(cmd);
+    } else if (prog == "fg") {
+        exit_code = builtin_fg(cmd, this->bg_jobs, Waiter(shell));
+    } else if (prog == "jobs") {
+        exit_code = builtin_jobs(cmd, this->bg_jobs);
     } else {
         return std::nullopt;
     }
@@ -478,7 +490,7 @@ std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) const {
 }
 
 ExecStats Executor::simple_command(const SimpleCommand &cmd,
-                                   const CommandState &state) const {
+                                   const CommandState &state) {
     // Close the redirections used by the child, the parent no longer needs
     // them. The unneeded files will be automatically closed when the
     // destructor will be called.
@@ -519,7 +531,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
 }
 
 ExecStats Executor::and_list(const AndList &and_list,
-                             const CommandState &state) const {
+                             const CommandState &state) {
     const auto lhs = this->op_list(*and_list.left, state);
 
     // JOB CONTROL:
@@ -542,8 +554,7 @@ ExecStats Executor::and_list(const AndList &and_list,
     return rhs;
 }
 
-ExecStats Executor::or_list(const OrList &or_list,
-                            const CommandState &state) const {
+ExecStats Executor::or_list(const OrList &or_list, const CommandState &state) {
     const auto lhs = this->op_list(*or_list.left, state);
 
     // JOB CONTROL:
@@ -564,8 +575,7 @@ ExecStats Executor::or_list(const OrList &or_list,
     return rhs;
 }
 
-Job Executor::pipeline(const Pipeline &pipeline,
-                       const CommandState &state) const {
+Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
     Job job{};
     pid_t pipeline_pgid = state.pipeline_pgid;
     CommandState left_state{state};
@@ -598,21 +608,28 @@ Job Executor::pipeline(const Pipeline &pipeline,
 }
 
 ExecStats Executor::wait_pipeline(const Pipeline &pipeline,
-                                  const CommandState &state) const {
-    auto towait = this->pipeline(pipeline, state);
-    const auto job = Waiter{this->shell}.wait(std::move(towait));
+                                  const CommandState &state) {
+    auto job = this->pipeline(pipeline, state);
+    Waiter{this->shell}.wait(job);
 
+    auto stopped = job.stopped() && !job.completed();
     auto stats = job.exec_stats();
 
-    if (pipeline.negated) {
+    if (stopped) {
+        /* If a job was stpeed while waiting for it put it in the
+         * background jobs
+         */
+        this->bg_jobs.emplace_back(std::move(job));
+    }
+
+    if (pipeline.negated /* && !stopped */) {
         stats.exit_code = (stats.exit_code != 0) ? 0 : 1;
     }
 
     return stats;
 }
 
-ExecStats Executor::op_list(const OpList &list,
-                            const CommandState &state) const {
+ExecStats Executor::op_list(const OpList &list, const CommandState &state) {
     const auto stats =
         std::visit(overloads{
                        [&](const AndList &and_list) {
@@ -631,7 +648,7 @@ ExecStats Executor::op_list(const OpList &list,
 }
 
 ListStats Executor::sequential_list(const SequentialList &sequential_list,
-                                    const CommandState &state) const {
+                                    const CommandState &state) {
 
     ListStats stats{};
 
@@ -645,7 +662,7 @@ ListStats Executor::sequential_list(const SequentialList &sequential_list,
 }
 
 ListStats Executor::async_list(const AsyncList &async_list,
-                               const CommandState &state) const {
+                               const CommandState &state) {
     ListStats stats{};
 
     if (async_list.left.has_value()) {
@@ -684,7 +701,7 @@ ListStats Executor::async_list(const AsyncList &async_list,
     return stats;
 }
 
-ListStats Executor::list(const List &list, const CommandState &state) const {
+ListStats Executor::list(const List &list, const CommandState &state) {
     auto stats = std::visit(overloads{
                                 [&](const SequentialList &seq) {
                                     return this->sequential_list(seq, state);
@@ -698,8 +715,7 @@ ListStats Executor::list(const List &list, const CommandState &state) const {
     return stats;
 }
 
-ExecStats Executor::command(const Command &command,
-                            const CommandState &state) const {
+ExecStats Executor::command(const Command &command, const CommandState &state) {
     const auto stats =
         std::visit(overloads{
                        [&](const SimpleCommand &cmd) {
@@ -715,7 +731,7 @@ ExecStats Executor::command(const Command &command,
 }
 
 ExecStats Executor::subshell(const Subshell &subshell,
-                             const CommandState &state) const {
+                             const CommandState &state) {
     // Close the redirections used by the child, the parent no longer needs
     // them. The unneeded files will be automatically closed when the
     // destructor will be called.
@@ -983,8 +999,8 @@ void Executor::substitution_run(std::vector<std::string> &support) {
         offset += (substitution.size()) - (end_str - start_str);
     }
 
-    std::println(stderr, "=== AFTER SUBS ===");
-    std::println(stderr, "{:#?}", support);
+    // std::println(stderr, "=== AFTER SUBS ===");
+    // std::println(stderr, "{:#?}", support);
 }
 
 std::vector<std::string> Executor::process_input() {
@@ -1078,7 +1094,8 @@ void Executor::loop() {
                     Waiter::update_status(job);
 
                     if (job.completed()) {
-                        std::println(stderr, "{}: Completed", job.job_master);
+                        std::println(stderr, "{}: Completed stats={:?}",
+                                     job.job_master, job.exec_stats());
                     }
                 }
 

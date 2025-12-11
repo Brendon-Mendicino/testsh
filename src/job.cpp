@@ -1,4 +1,5 @@
 #include "job.h"
+#include "shell.h"
 #include <optional>
 
 ExecStats ExecStats::ERROR = {
@@ -20,10 +21,6 @@ bool Job::completed() const {
     return true;
 }
 
-/**
- * Returns true if all the jobs are either stopped or
- * completed.
- */
 bool Job::stopped() const {
     for (const auto &entry : this->jobs) {
         if (!entry.second.completed && !entry.second.stopped)
@@ -31,6 +28,12 @@ bool Job::stopped() const {
     }
 
     return true;
+}
+
+void Job::mark_running() {
+    for (auto &[_, prog] : this->jobs) {
+        prog.stopped = false;
+    }
 }
 
 void Job::add(ExecStats &&stats) {
@@ -49,3 +52,23 @@ void Job::add(ExecStats &&stats) {
 }
 
 ExecStats Job::exec_stats() const { return this->jobs.at(this->job_master); }
+
+void Job::set_modes(const Shell &shell) {
+    tcgetattr(shell.terminal, &tmodes);
+    tmodes_init = true;
+}
+
+void Job::restore_modes(const Shell &shell) {
+    if (tmodes_init) {
+        /* Restore terminal state the previous state of the job.
+         */
+        tcsetattr(shell.terminal, TCSADRAIN, &tmodes);
+    } else {
+        /* If the job terminal modes where never initialized it means that the
+         * job started in background. This means that it never modified,
+         * just assign the current ones without doing anything.
+         */
+        tcgetattr(shell.terminal, &tmodes);
+        tmodes_init = true;
+    }
+}
