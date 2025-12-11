@@ -261,12 +261,28 @@ void Waiter::wait(Job &job) const {
 
         /* Restore the shell’s terminal modes.  */
         job.set_modes(shell);
+        // TODO: this is not fine when calling `stty`. Decide how do handle this
         tcsetattr(shell.terminal, TCSADRAIN, &shell.tmodes);
     } else {
         retval = Waiter::wait_job(std::move(job));
     }
 
     job = retval;
+}
+
+void Waiter::wait_inside_async(Job &job) const {
+    pid_t pgid = job.pgid;
+
+    /* Don't check for stopped jobs. An asyn list will terminate only when all
+     * the childred are completed. Some of them might get stopped by the tty. We
+     * don't want to loose them before exiting the async list.
+     */
+    while (!job.completed()) {
+        int wstatus;
+        const pid_t pid = waitpid(-pgid, &wstatus, WUNTRACED);
+
+        process_wstatus(job, pid, wstatus);
+    }
 }
 
 void Waiter::bg(Job &job) const {
@@ -332,7 +348,6 @@ struct Spawner {
 
     static void async_signal(void) {
         /* Set the handling for job control signals back to the default.
-         * async_list must ignore SIGTTIN, SIGTTOU
          */
         signal(SIGINT, SIG_IGN);
         signal(SIGQUIT, SIG_DFL);
@@ -674,11 +689,32 @@ ListStats Executor::async_list(const AsyncList &async_list,
                     .spawn_type = SpawnType::async_list};
 
     const auto async_fn = [&]() {
+        Waiter waiter{shell};
         CommandState async_state{state};
         async_state.pipeline_pgid = getpgrp();
         async_state.is_foreground = false;
 
+        /* Clear any bg_jobs from the parent. It's ok to do this in this context
+         * because the child will have its own memory space (due to the COW
+         * mechanism). Use the background jobs to wait on any child if it get
+         * stopped. e.g. `cat &` should be stopped by a SIGTTIN when trying to
+         * read the stdin from background.
+         */
+        this->bg_jobs.clear();
+
         const auto stats = this->op_list(*async_list.right, async_state);
+
+        /* Wait for any background job before terminating
+         */
+        while (!this->bg_jobs.empty()) {
+            for (auto &job : this->bg_jobs)
+                waiter.wait_inside_async(job);
+
+            this->bg_jobs =
+                this->bg_jobs |
+                vw::filter([](const auto &j) { return !j.completed(); }) |
+                std::ranges::to<std::vector>();
+        }
 
         exit(stats.exit_code);
     };
@@ -1044,10 +1080,10 @@ ExecStats Executor::execute() {
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    std::println(stderr, "=== SYNTAX TREE ===");
-    std::println(stderr, "{:#?}", *program);
+    // std::println(stderr, "=== SYNTAX TREE ===");
+    // std::println(stderr, "{:#?}", *program);
 
-    std::println(stderr, "=== COMMAND BEGIN ===");
+    // std::println(stderr, "=== COMMAND BEGIN ===");
 
     const auto retval = this->program(*program);
 

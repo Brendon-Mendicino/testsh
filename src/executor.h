@@ -83,6 +83,7 @@ struct Waiter {
     static void update_status(Job &job);
 
     void wait(Job &job) const;
+    void wait_inside_async(Job &job) const;
     void bg(Job &job) const;
     void fg(Job &job) const;
 };
