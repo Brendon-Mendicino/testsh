@@ -1,6 +1,12 @@
 #include "syntax.h"
+#include "tokenizer.h"
+#include "util.h"
 #include <charconv>
 #include <cstdlib>
+#include <optional>
+#include <string_view>
+#include <variant>
+#include <vector>
 
 // ------------------------------------
 // SimpleCommand
@@ -685,56 +691,182 @@ std::optional<SequentialList> SyntaxTree<Tok>::term(Tok &tokenizer) const {
  *                  | cmd_name cmd_suffix
  *                  | cmd_name
  *                  ;
- * cmd_name       ::= WORD                       Apply rule 7a
- *                  ;
- * cmd_word       ::= WORD                       Apply rule 7b
- *                  ;
- * cmd_prefix     ::=            io_redirect
- *                  | cmd_prefix io_redirect
- *                  |            ASSIGNMENT_WORD
- *                  | cmd_prefix ASSIGNMENT_WORD
- *                  ;
- * cmd_suffix     ::=            io_redirect
- *                  | cmd_suffix io_redirect
- *                  |            WORD
- *                  | cmd_suffix WORD
- *                  ;
  * ```
  *
  * @param tokenizer
  * @return std::optional<SimpleCommand>
  */
 template <IsTokenizer Tok>
-std::optional<SimpleCommand>
-SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
-    const auto cmd_word = this->word(tokenizer);
-    if (!cmd_word)
+std::optional<Command> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
+    auto cmd_prefix = this->cmd_prefix(tokenizer);
+    if (!cmd_prefix.empty()) {
+        auto cmd_word = this->cmd_word(tokenizer);
+        auto cmd_suffix = this->cmd_suffix(tokenizer);
+
+        std::vector<Token> args{};
+        std::vector<Redirect> redirects{};
+        std::vector<AssignmentWord> assigments{};
+
+        for (const auto &s : cmd_prefix) {
+            if (std::holds_alternative<AssignmentWord>(s))
+                assigments.emplace_back(std::get<AssignmentWord>(s));
+            else
+                redirects.emplace_back(std::get<Redirect>(s));
+        }
+
+        for (const auto &s : cmd_suffix) {
+            if (std::holds_alternative<Token>(s))
+                args.emplace_back(std::get<Token>(s));
+            else
+                redirects.emplace_back(std::get<Redirect>(s));
+        }
+
+        if (!cmd_word) {
+            return SimpleAssignment{
+                .redirections = redirects,
+                .envs = assigments,
+            };
+        }
+
+        return SimpleCommand{
+            .program = cmd_word.value(),
+            .arguments = args,
+            .redirections = redirects,
+            .envs = assigments,
+        };
+    }
+
+    auto cmd_name = this->cmd_name(tokenizer);
+    if (cmd_name) {
+        auto cmd_suffix = this->cmd_suffix(tokenizer);
+
+        std::vector<Token> args{};
+        std::vector<Redirect> redirects{};
+
+        for (const auto &s : cmd_suffix) {
+            if (std::holds_alternative<Token>(s))
+                args.emplace_back(std::get<Token>(s));
+            else
+                redirects.emplace_back(std::get<Redirect>(s));
+        }
+
+        return SimpleCommand{
+            .program = *cmd_name,
+            .arguments = args,
+            .redirections = redirects,
+            .envs = {},
+        };
+    }
+
+    return std::nullopt;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * cmd_name       ::= WORD                       Apply rule 7a
+ *                  ;
+ * ```
+ */
+template <IsTokenizer Tok>
+std::optional<Token> SyntaxTree<Tok>::cmd_name(Tok &tokenizer) const {
+    return this->word(tokenizer);
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * cmd_word       ::= WORD                       Apply rule 7b
+ *                  ;
+ * ```
+ */
+template <IsTokenizer Tok>
+std::optional<Token> SyntaxTree<Tok>::cmd_word(Tok &tokenizer) const {
+    auto word = tokenizer.peek();
+
+    if (!word)
         return std::nullopt;
 
-    std::vector<Token> args{};
-    std::vector<Redirect> redirects{};
+    if (word->type != TokenType::word && word->type != TokenType::quoted_word)
+        return std::nullopt;
 
-    while (!tokenizer.next_is_eof()) {
-        auto redirect = this->io_redirect(tokenizer);
-        if (redirect) {
-            redirects.emplace_back(*redirect);
+    if (word->type == TokenType::word) {
+        auto text = word->value;
+        if (text.find("=") == 0)
+            return std::nullopt;
+    }
+
+    tokenizer.next_token();
+
+    return word;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * cmd_prefix     ::=            io_redirect
+ *                  | cmd_prefix io_redirect
+ *                  |            ASSIGNMENT_WORD
+ *                  | cmd_prefix ASSIGNMENT_WORD
+ *                  ;
+ * ```
+ */
+template <IsTokenizer Tok>
+std::vector<std::variant<AssignmentWord, Redirect>>
+SyntaxTree<Tok>::cmd_prefix(Tok &tokenizer) const {
+    std::vector<std::variant<AssignmentWord, Redirect>> retval{};
+
+    for (;;) {
+        if (auto word = this->assignment_word(tokenizer)) {
+            retval.emplace_back(std::move(*word));
             continue;
         }
 
-        auto arg = this->word(tokenizer);
-        if (arg) {
-            args.emplace_back(*arg);
+        if (auto redirect = this->io_redirect(tokenizer)) {
+            retval.emplace_back(std::move(*redirect));
             continue;
         }
 
         break;
     }
 
-    return SimpleCommand{
-        .program = *cmd_word,
-        .arguments = std::move(args),
-        .redirections = std::move(redirects),
-    };
+    return retval;
+}
+
+/**
+ * BNF:
+ *
+ * ```
+ * cmd_suffix     ::=            io_redirect
+ *                  | cmd_suffix io_redirect
+ *                  |            WORD
+ *                  | cmd_suffix WORD
+ *                  ;
+ * ```
+ */
+template <IsTokenizer Tok>
+std::vector<std::variant<Token, Redirect>>
+SyntaxTree<Tok>::cmd_suffix(Tok &tokenizer) const {
+    std::vector<std::variant<Token, Redirect>> retval{};
+
+    for (;;) {
+        if (auto word = this->word(tokenizer)) {
+            retval.emplace_back(std::move(*word));
+            continue;
+        }
+
+        if (auto redirect = this->io_redirect(tokenizer)) {
+            retval.emplace_back(std::move(*redirect));
+            continue;
+        }
+
+        break;
+    }
+
+    return retval;
 }
 
 /**
@@ -1075,6 +1207,33 @@ std::optional<Token> SyntaxTree<Tok>::word(Tok &tokenizer) const {
     tokenizer.next_token();
 
     return word;
+}
+
+template <IsTokenizer Tok>
+std::optional<AssignmentWord>
+SyntaxTree<Tok>::assignment_word(Tok &tokenizer) const {
+    Tok sub_tok{tokenizer};
+    const std::string_view eq{"="};
+
+    const auto word = this->token(sub_tok, TokenType::word);
+    if (!word)
+        return std::nullopt;
+
+    const auto eq_pos = word->value.find(eq);
+
+    if (eq_pos == 0 || eq_pos == std::string::npos)
+        return std::nullopt;
+
+    std::string_view key = word->value.substr(0, eq_pos);
+    std::string_view value = word->value.substr(eq_pos + eq.size());
+
+    tokenizer = sub_tok;
+
+    return AssignmentWord{
+        .whole = *word,
+        .key = key,
+        .value = value,
+    };
 }
 
 template <IsTokenizer Tok>

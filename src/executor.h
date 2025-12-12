@@ -48,6 +48,8 @@ struct Executor {
     std::optional<ExecStats> builtin(const SimpleCommand &cmd);
     ExecStats simple_command(const SimpleCommand &cmd,
                              const CommandState &state);
+    ExecStats simple_assignment(const SimpleAssignment &assign,
+                                const CommandState &state);
     ExecStats and_list(const AndList &and_list, const CommandState &state);
     ExecStats or_list(const OrList &or_list, const CommandState &state);
     Job pipeline(const Pipeline &pipeline, const CommandState &state);

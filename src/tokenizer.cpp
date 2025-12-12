@@ -35,7 +35,7 @@ static const std::vector<Specification> specs{
 
     // Word kinds
     // Match any normal character + any quoted character
-    {R"(^((?:[\w\-\/.]|\\.)+))", TokenType::word},
+    {R"(^((?:[\w=\-\/.]|\\.)+))", TokenType::word},
 
     // Quoatations
     {R"(^('[^']*'))", TokenType::quoted_word},

@@ -38,7 +38,8 @@ $(cd "$BUILD" && \
 
 1. [x] Stage 1: lists, and, or, subshell, line continuations, cd, exec, exit
 1. [x] Stage 2: redirections, pipes
-1. [ ] Stage 3: job control system
+1. [x] Stage 3: job control system
+1. [ ] Stage 4: envs
 
 ## Links
 

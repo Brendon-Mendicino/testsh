@@ -1,6 +1,8 @@
 #include "executor.h"
 #include "builtin.h"
+#include "exec_prog.h"
 #include "job.h"
+#include "syntax.h"
 #include "util.h"
 #include <algorithm>
 #include <cerrno>
@@ -530,10 +532,9 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
         if (!redirect.apply_redirections())
             exit(1);
 
-        const ArgsToExec exec{cmd};
-        const auto args_to_pass = exec.args()->get();
+        Exec exec_prog{cmd};
+        exec_prog.exec();
 
-        execvp(args_to_pass[0], (char *const *)args_to_pass);
         exit(1);
     };
 
@@ -543,6 +544,13 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     //              retval.pipeline_pgid, cmd.text());
 
     return retval;
+}
+
+ExecStats Executor::simple_assignment(const SimpleAssignment &assign,
+                                      const CommandState &state) {
+    assert(true);
+
+    return {};
 }
 
 ExecStats Executor::and_list(const AndList &and_list,
@@ -756,6 +764,9 @@ ExecStats Executor::command(const Command &command, const CommandState &state) {
         std::visit(overloads{
                        [&](const SimpleCommand &cmd) {
                            return this->simple_command(cmd, state);
+                       },
+                       [&](const SimpleAssignment &assign) {
+                           return this->simple_assignment(assign, state);
                        },
                        [&](const Subshell &subshell) {
                            return this->subshell(subshell, state);
@@ -1080,10 +1091,10 @@ ExecStats Executor::execute() {
     if (!program.has_value())
         throw std::runtime_error("Parsing failed!");
 
-    // std::println(stderr, "=== SYNTAX TREE ===");
-    // std::println(stderr, "{:#?}", *program);
+    std::println(stderr, "=== SYNTAX TREE ===");
+    std::println(stderr, "{:#?}", *program);
 
-    // std::println(stderr, "=== COMMAND BEGIN ===");
+    std::println(stderr, "=== COMMAND BEGIN ===");
 
     const auto retval = this->program(*program);
 

@@ -16,6 +16,12 @@ enum class OpenKind {
     rw,
 };
 
+struct AssignmentWord {
+    Token whole;
+    std::string_view key;
+    std::string_view value;
+};
+
 struct FileRedirect {
     int redirect_fd;
     OpenKind file_kind;
@@ -33,11 +39,16 @@ struct CloseFd {
 
 using Redirect = std::variant<FileRedirect, FdRedirect, CloseFd>;
 
+struct SimpleAssignment {
+    std::vector<Redirect> redirections;
+    std::vector<AssignmentWord> envs;
+};
+
 struct SimpleCommand {
     Token program;
-    // TODO: this should be Tokens
     std::vector<Token> arguments;
     std::vector<Redirect> redirections;
+    std::vector<AssignmentWord> envs;
 
     std::string text() const;
 };
@@ -49,7 +60,7 @@ struct Pipeline;
 struct SequentialList;
 struct AsyncList;
 
-using Command = std::variant<SimpleCommand, Subshell>;
+using Command = std::variant<SimpleAssignment, SimpleCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
 using List = std::variant<SequentialList, AsyncList>;
 
@@ -157,7 +168,16 @@ template <IsTokenizer Tok> class SyntaxTree {
 
     std::optional<SequentialList> term(Tok &tokenizer) const;
 
-    std::optional<SimpleCommand> simple_command(Tok &tokenizer) const;
+    std::optional<Command> simple_command(Tok &tokenizer) const;
+
+    std::optional<Token> cmd_name(Tok &tokenizer) const;
+
+    std::optional<Token> cmd_word(Tok &tokenizer) const;
+
+    std::vector<std::variant<AssignmentWord, Redirect>>
+    cmd_prefix(Tok &tokenizer) const;
+
+    std::vector<std::variant<Token, Redirect>> cmd_suffix(Tok &tokenizer) const;
 
     std::optional<std::vector<Redirect>> redirect_list(Tok &tokenizer) const;
 
@@ -179,43 +199,10 @@ template <IsTokenizer Tok> class SyntaxTree {
 
     std::optional<Token> word(Tok &tokenizer) const;
 
+    std::optional<AssignmentWord> assignment_word(Tok &tokenizer) const;
+
     inline std::optional<Token> token(Tok &tokenizer,
                                       const TokenType type) const;
-};
-
-class ArgsToExec {
-    typedef const char *args_array_t[];
-
-    std::vector<std::string> str_owner;
-    std::unique_ptr<args_array_t> args_array;
-    std::size_t args_size;
-
-  public:
-    explicit ArgsToExec(const SimpleCommand &cmd) {
-        const auto &args = cmd.arguments;
-
-        // +1 from program
-        // +1 from NULL terminator
-        this->args_size = args.size() + 2;
-
-        this->args_array = std::make_unique<args_array_t>(this->args_size);
-
-        this->str_owner.reserve(args.size() + 2);
-
-        // Push program first
-        this->str_owner.emplace_back(cmd.program.text());
-        this->args_array[0] = this->str_owner[0].c_str();
-
-        for (size_t i{}; i < args.size(); ++i) {
-            auto &s = this->str_owner.emplace_back(args[i].text());
-            this->args_array[i + 1] = s.c_str();
-        }
-
-        // The args array needs to be null-terminated
-        this->args_array[this->args_size - 1] = nullptr;
-    }
-
-    [[nodiscard]] auto args() const & { return &this->args_array; }
 };
 
 // ----------------
@@ -234,6 +221,17 @@ constexpr std::string_view to_string(const OpenKind kind) {
         return "rw";
     }
 }
+
+template <typename CharT>
+struct std::formatter<AssignmentWord, CharT> : debug_spec {
+    auto format(const AssignmentWord &a, auto &ctx) const {
+        this->start<AssignmentWord>(ctx);
+        this->field("whole", a.whole, ctx);
+        this->field("key", a.key, ctx);
+        this->field("value", a.value, ctx);
+        return this->finish(ctx);
+    }
+};
 
 template <> struct std::formatter<FileRedirect> : debug_spec {
     auto format(const FileRedirect &red, auto &ctx) const {
@@ -262,12 +260,23 @@ template <> struct std::formatter<CloseFd> : debug_spec {
     }
 };
 
+template <typename CharT>
+struct std::formatter<SimpleAssignment, CharT> : debug_spec {
+    auto format(const SimpleAssignment &a, auto &ctx) const {
+        this->start<SimpleAssignment>(ctx);
+        this->field("redirections", a.redirections, ctx);
+        this->field("envs", a.envs, ctx);
+        return this->finish(ctx);
+    }
+};
+
 template <> struct std::formatter<SimpleCommand> : debug_spec {
     auto format(const SimpleCommand &prog, auto &ctx) const {
         this->start<SimpleCommand>(ctx);
         this->field("program", prog.program, ctx);
         this->field("arguments", prog.arguments, ctx);
         this->field("redirections", prog.redirections, ctx);
+        this->field("envs", prog.envs, ctx);
         return this->finish(ctx);
     }
 };

@@ -3,6 +3,8 @@ cc_binary(
     srcs = [
         "src/builtin.cpp",
         "src/builtin.h",
+        "src/exec_prog.cpp",
+        "src/exec_prog.h",
         "src/executor.cpp",
         "src/executor.h",
         "src/job.cpp",

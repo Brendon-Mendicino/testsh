@@ -1,4 +1,5 @@
 #include "builtin.h"
+#include "exec_prog.h"
 #include <cerrno>
 #include <cstdlib>
 #include <cstring>
@@ -69,12 +70,12 @@ int builtin_exec(const SimpleCommand &exec) {
             std::vector(exec.arguments.begin() + 1, exec.arguments.end()),
     };
 
-    ArgsToExec exec_feed{to_exec};
-    const auto &args = exec_feed.args()->get();
+    Exec executor{to_exec};
 
-    const int retval = execvp(args[0], (char *const *)args);
+    const int retval = executor.exec();
 
-    std::println(stderr, "exec: {}: {}", args[0], std::strerror(errno));
+    std::println(stderr, "exec: {}: {}", to_exec.program.text(),
+                 std::strerror(errno));
     return retval;
 }
 
