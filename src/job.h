@@ -9,6 +9,7 @@
 #include <termios.h>
 #include <unordered_map>
 
+// TODO: rename as command (?)
 struct ExecStats {
     int exit_code;
     pid_t child_pid = -1;
@@ -19,6 +20,9 @@ struct ExecStats {
     std::optional<int> signaled = std::nullopt;
 
     static ExecStats ERROR;
+    static ExecStats SHALLOW;
+
+    static ExecStats shallow(pid_t pid);
 };
 
 /**

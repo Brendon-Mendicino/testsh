@@ -101,9 +101,46 @@ template <typename T> inline std::string typeid_name() {
     return name;
 }
 
+// Takes the values inside an optional and reset the content.
+template <typename T>
+inline T
+take(std::optional<T> &opt) noexcept(std::is_nothrow_move_constructible_v<T>) {
+    assert(opt.has_value());
+
+    T tmp = std::move(*opt);
+    opt.reset();
+    return tmp;
+}
+
 // ----------------------------------
 // CLASSES
 // ----------------------------------
+
+// adl hash function:
+template <class T> auto hash(T const &t) -> decltype(std::hash<T>{}(t)) {
+    return std::hash<T>{}(t);
+}
+
+// Projected hasher:
+template <class Proj> struct ProjHash {
+
+    template <class T> constexpr std::size_t operator()(T const &t) const {
+        return hash(Proj{}(t));
+    }
+
+    using is_transparent = std::true_type;
+};
+
+// Projected equality:
+template <class Proj> struct ProjEq {
+
+    template <class T, class U>
+    constexpr std::size_t operator()(T const &t, U const &u) const {
+        return std::equal_to<>{}(Proj{}(t), Proj{}(u));
+    }
+
+    using is_transparent = std::true_type;
+};
 
 // ----------------------------------
 // FORMATTING

@@ -12,6 +12,22 @@ ExecStats ExecStats::ERROR = {
     .signaled = std::nullopt,
 };
 
+ExecStats ExecStats::SHALLOW = {
+    .exit_code = 0,
+    .child_pid = 0,
+    .pipeline_pgid = -1,
+    .completed = true,
+    .stopped = false,
+    .in_background = false,
+    .signaled = std::nullopt,
+};
+
+ExecStats ExecStats::shallow(pid_t pid) {
+    auto data = SHALLOW;
+    data.child_pid = pid;
+    return data;
+}
+
 bool Job::completed() const {
     for (const auto &entry : this->jobs) {
         if (!entry.second.completed)

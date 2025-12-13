@@ -1,7 +1,11 @@
 #include "exec_prog.h"
 #include <cstddef>
-#include <print>
+#include <memory>
+#include <ranges>
 #include <unistd.h>
+#include <unordered_set>
+
+namespace vw = std::ranges::views;
 
 void Exec::init_args(const SimpleCommand &cmd) {
     const auto &args = cmd.arguments;
@@ -27,63 +31,63 @@ void Exec::init_args(const SimpleCommand &cmd) {
     this->args_array[this->args_size - 1] = nullptr;
 }
 
-void Exec::init_envp(const SimpleCommand &cmd) {
-    const auto &envp = cmd.envs;
-    size_t curr_env_size{};
-
-    /* If envp_size is 0 use the environ (unistd) variable directly to inject
-     * into exec.
-     */
-    if (envp.size() == 0) {
-        this->envp_size = 0;
-        return;
+void Exec::init_envp(const SimpleCommand &cmd, const Shell &shell) {
+    std::unordered_set<std::string_view> cmd_env_names{};
+    for (const auto &env : cmd.envs) {
+        cmd_env_names.insert(env.key);
     }
 
-    // Count the current environs
-    for (size_t i = 0; environ[i] != nullptr; i++)
-        this->envp_size += 1;
+    /* Add external envs from the shell that are not present in the current
+     * command.
+     */
+    for (const auto &env : shell.vars) {
+        if (!env.attr.external)
+            continue;
 
-    curr_env_size = this->envp_size;
+        if (cmd_env_names.contains(env.name()))
+            continue;
 
-    this->envp_size += envp.size();
+        this->envp_owner.emplace_back(env.str);
+    }
+
+    /* Now add envs from the current command. If names are duplicated, the last
+     * value has to be passed down to the child. Add them in reverse order and
+     * check if they are still in the set, remove it from the set after you the
+     * env once, subsequent vars will be ignored.
+     */
+    for (const auto &cmd_env : cmd.envs | vw::reverse) {
+        if (!cmd_env_names.contains(cmd_env.key))
+            continue;
+
+        cmd_env_names.erase(cmd_env.key);
+        this->envp_owner.emplace_back(cmd_env.whole.text());
+    }
+
     // +1 for NULL terminator
-    this->envp_size += 1;
-
-    std::println(stderr, "envp_size={}", envp_size);
+    this->envp_size = this->envp_owner.size() + 1;
 
     this->envp_array = std::make_unique<char_array_t>(this->envp_size);
 
-    // Copy current environment
-    for (size_t i = 0; i < curr_env_size; i++)
-        this->envp_array[i] = environ[i];
-
-    this->envp_owner.reserve(envp.size());
-
-    // Append extra entries
-    for (size_t i = 0; i < envp.size(); i++) {
-        auto &s = this->envp_owner.emplace_back(envp[i].whole.text());
-        this->envp_array[i + curr_env_size] = s.c_str();
+    for (size_t i = 0; i < this->envp_owner.size(); i++) {
+        this->envp_array[i] = this->envp_owner[i].c_str();
     }
 
     this->envp_array[this->envp_size - 1] = nullptr;
 }
 
-const char *const *Exec::envp() const {
-    return (this->envp_size == 0) ? environ : this->envp_array.get();
-}
-
-Exec::Exec(const SimpleCommand &cmd)
+Exec::Exec(const SimpleCommand &cmd, const Shell &shell)
     : args_owner(), args_array(), args_size(), envp_owner(), envp_array(),
       envp_size() {
     init_args(cmd);
-    init_envp(cmd);
+    init_envp(cmd, shell);
 }
 
 int Exec::exec() const {
-    char *const *envp = (char *const *)this->envp();
+    char *const *envp = (char *const *)this->envp_array.get();
     char *const *argv = (char *const *)this->args_array.get();
 
     assert(argv != nullptr);
+    assert(argv[0] != nullptr);
     assert(envp != nullptr);
 
     return execvpe(argv[0], argv, envp);

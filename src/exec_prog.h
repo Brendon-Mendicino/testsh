@@ -1,6 +1,7 @@
 #ifndef TESTSH_EXEC_PROG_H
 #define TESTSH_EXEC_PROG_H
 
+#include "shell.h"
 #include "syntax.h"
 #include <memory>
 #include <string>
@@ -19,12 +20,10 @@ class Exec {
 
     void init_args(const SimpleCommand &cmd);
 
-    void init_envp(const SimpleCommand &cmd);
-
-    const char *const *envp() const;
+    void init_envp(const SimpleCommand &cmd, const Shell &shell);
 
   public:
-    explicit Exec(const SimpleCommand &cmd);
+    explicit Exec(const SimpleCommand &cmd, const Shell &shell);
 
     int exec() const;
 };

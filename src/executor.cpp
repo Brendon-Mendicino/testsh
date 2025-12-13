@@ -487,7 +487,7 @@ std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) {
     } else if (prog == "cd") {
         exit_code = builtin_cd(cmd);
     } else if (prog == "exec") {
-        exit_code = builtin_exec(cmd);
+        exit_code = builtin_exec(cmd, this->shell);
     } else if (prog == "exit") {
         exit_code = builtin_exit(cmd);
     } else if (prog == "fg") {
@@ -532,7 +532,7 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
         if (!redirect.apply_redirections())
             exit(1);
 
-        Exec exec_prog{cmd};
+        Exec exec_prog{cmd, this->shell};
         exec_prog.exec();
 
         exit(1);
@@ -546,11 +546,30 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     return retval;
 }
 
+static void add_shell_vars(Shell &shell, const SimpleAssignment &assign) {
+    for (const auto &env : assign.envs) {
+        shell.vars.upsert(env.whole.text(), std::nullopt);
+    }
+}
+
 ExecStats Executor::simple_assignment(const SimpleAssignment &assign,
                                       const CommandState &state) {
-    assert(true);
+    // Close the redirections used by the child, the parent no longer needs
+    // them. The unneeded files will be automatically closed when the
+    // destructor will be called.
+    RedirectController redirect{state};
+    Spawner spawner{state, this->shell};
 
-    return {};
+    if (!redirect.add_redirects(assign.redirections)) {
+        return ExecStats::ERROR;
+    }
+
+    if (state.inside_pipeline) {
+        return spawner.spawn_async(add_shell_vars, this->shell, assign);
+    }
+
+    add_shell_vars(this->shell, assign);
+    return ExecStats::shallow(getpid());
 }
 
 ExecStats Executor::and_list(const AndList &and_list,

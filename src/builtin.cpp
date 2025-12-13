@@ -55,7 +55,7 @@ int builtin_cd(const SimpleCommand &cd) {
     return 0;
 }
 
-int builtin_exec(const SimpleCommand &exec) {
+int builtin_exec(const SimpleCommand &exec, const Shell &shell) {
     assert(exec.program.text() == "exec");
 
     if (exec.arguments.size() < 1) {
@@ -70,7 +70,7 @@ int builtin_exec(const SimpleCommand &exec) {
             std::vector(exec.arguments.begin() + 1, exec.arguments.end()),
     };
 
-    Exec executor{to_exec};
+    Exec executor{to_exec, shell};
 
     const int retval = executor.exec();
 

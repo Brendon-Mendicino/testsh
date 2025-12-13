@@ -3,14 +3,51 @@
 
 #include "util.h"
 #include <format>
+#include <optional>
+#include <string_view>
 #include <termios.h>
 #include <unistd.h>
+#include <unordered_set>
+
+struct VarAttr {
+    bool external = false;
+};
+
+struct Var {
+    std::string str;
+    std::string::size_type eq_off;
+    VarAttr attr;
+
+    std::string_view name() const;
+    std::string_view value() const;
+};
+
+// Projects for Var inside unordered_set
+struct VarP {
+    std::string_view operator()(Var const &shell_var) const {
+        return shell_var.name();
+    }
+    std::string_view operator()(std::string_view vw) const { return vw; }
+};
+
+class ShellVars {
+    std::unordered_set<Var, ProjHash<VarP>, ProjEq<VarP>> vars;
+
+  public:
+    auto begin() { return vars.begin(); }
+    auto end() { return vars.end(); }
+    auto begin() const { return vars.begin(); }
+    auto end() const { return vars.end(); }
+
+    void upsert(std::string var, std::optional<VarAttr> attr);
+};
 
 struct Shell {
     pid_t pgid;
     termios tmodes;
     int terminal;
     int is_interactive;
+    ShellVars vars;
 
     Shell();
 };
