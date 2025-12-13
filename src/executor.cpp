@@ -618,33 +618,48 @@ ExecStats Executor::or_list(const OrList &or_list, const CommandState &state) {
 }
 
 Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
-    Job job{};
-    pid_t pipeline_pgid = state.pipeline_pgid;
-    CommandState left_state{state};
+    assertm(!pipeline.cmds.empty(), "A pipeline must always contain something");
 
-    if (pipeline.left.has_value()) {
+    Job job{};
+    pid_t pipeline_pgid = -1;
+    int prev_reader_fd = 0;
+
+    auto no_cmds = std::max(pipeline.cmds.size() - 1, (size_t)0);
+    for (const auto &cmd : pipeline.cmds | vw::take(no_cmds)) {
         auto pipefd = create_pipe();
         const auto [reader_fd, writer_fd] = pipefd;
 
-        left_state.redirects.emplace_back(STDIN_FILENO, reader_fd);
-        left_state.fd_to_close.emplace_back(writer_fd);
+        std::vector<std::tuple<int, int>> redirects{};
+        if (prev_reader_fd != 0)
+            redirects.emplace_back(STDIN_FILENO, prev_reader_fd);
 
-        const auto pipe_job = this->pipeline(
-            **pipeline.left, {.redirects = {{STDOUT_FILENO, writer_fd}},
-                              .fd_to_close = {reader_fd},
-                              .inside_pipeline = true,
-                              .pipeline_pgid = pipeline_pgid});
+        redirects.emplace_back(STDOUT_FILENO, writer_fd);
+        prev_reader_fd = reader_fd;
 
-        left_state.pipeline_pgid = pipe_job.pgid;
-        job = std::move(pipe_job);
+        auto stats = this->command(cmd, {
+                                            .redirects = std::move(redirects),
+                                            .fd_to_close = {reader_fd},
+                                            .inside_pipeline = true,
+                                            .pipeline_pgid = pipeline_pgid,
+                                        });
+
+        pipeline_pgid = stats.pipeline_pgid;
+        job.add(std::move(stats));
     }
 
-    // At this point the pgid will be changed by the child if it existed
+    std::vector<std::tuple<int, int>> redirects{};
+    if (prev_reader_fd != 0)
+        redirects.emplace_back(STDIN_FILENO, prev_reader_fd);
 
-    // Last command of pipeline execution
-    ExecStats cmd_stats = this->command(*pipeline.right, left_state);
+    auto stats = this->command(pipeline.cmds.back(),
+                               {
+                                   .redirects = std::move(redirects),
+                                   .fd_to_close = {},
+                                   .inside_pipeline = false,
+                                   .pipeline_pgid = pipeline_pgid,
+                               });
 
-    job.add(std::move(cmd_stats));
+    job.add(std::move(stats));
 
     return job;
 }

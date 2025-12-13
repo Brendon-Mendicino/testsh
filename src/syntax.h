@@ -75,8 +75,7 @@ struct OrList {
 };
 
 struct Pipeline {
-    optional_ptr<Pipeline> left;
-    std::unique_ptr<Command> right;
+    std::vector<Command> cmds;
     bool negated;
 };
 
@@ -293,8 +292,7 @@ template <> struct std::formatter<Subshell> : debug_spec {
 template <> struct std::formatter<Pipeline> : debug_spec {
     auto format(const Pipeline &p, auto &ctx) const {
         this->start<Pipeline>(ctx);
-        this->field("left", p.left, ctx);
-        this->field("right", p.right, ctx);
+        this->field("cmds", p.cmds, ctx);
         this->field("negated", p.negated, ctx);
         return this->finish(ctx);
     }

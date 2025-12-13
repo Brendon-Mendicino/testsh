@@ -456,7 +456,7 @@ std::optional<Pipeline> SyntaxTree<Tok>::pipe_sequence(Tok &tokenizer) const {
     if (!first_command.has_value())
         return std::nullopt;
 
-    retval.right = std::make_unique<Command>(std::move(*first_command));
+    retval.cmds.emplace_back(take(first_command));
 
     // Check if there are other commands to concatenate to the return value
     for (;;) {
@@ -476,12 +476,7 @@ std::optional<Pipeline> SyntaxTree<Tok>::pipe_sequence(Tok &tokenizer) const {
             break;
         }
 
-        Pipeline new_pipeline{
-            .left = std::make_unique<Pipeline>(std::move(retval)),
-            .right = std::make_unique<Command>(std::move(*next_command)),
-        };
-
-        retval = std::move(new_pipeline);
+        retval.cmds.emplace_back(take(next_command));
 
         tokenizer = sub_token;
     }
