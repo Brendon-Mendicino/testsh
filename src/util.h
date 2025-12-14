@@ -101,7 +101,13 @@ template <typename T> inline std::string typeid_name() {
     return name;
 }
 
-// Takes the values inside an optional and reset the content.
+/**
+ * Takes the values inside an optional and reset the content.
+ *
+ * ```c++
+ * int i = 10;
+ * ```
+ */
 template <typename T>
 inline T
 take(std::optional<T> &opt) noexcept(std::is_nothrow_move_constructible_v<T>) {

@@ -4,13 +4,13 @@ This project is based on the guide <https://github.com/tokenrove/build-your-own-
 
 Run the project:
 
-```shell
+```sh
 bazel run :testsh
 ```
 
 Optimized build:
 
-```shell
+```sh
 bazel build --config=opt :testsh
 ```
 
@@ -22,7 +22,7 @@ Run the VSCode task: `Build Testsh (Debug)` from the file `./.vscode/tasks.json`
 
 `compile_commands.json` is needed by `clangd` to properly do code highlighting/completions with the bazel dependencies.
 
-```shell
+```sh
 BUILD='build/compile_commands'
 URL='https://github.com/kiron1/bazel-compile-commands/releases/download/v0.20.1/bazel-compile-commands_0.20.1-linux_amd64.zip'
 mkdir -p "$BUILD"

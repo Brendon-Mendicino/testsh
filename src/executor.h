@@ -48,6 +48,7 @@ struct Executor {
     std::optional<ExecStats> builtin(const SimpleCommand &cmd);
     ExecStats simple_command(const SimpleCommand &cmd,
                              const CommandState &state);
+    ExecStats unsub_command(const UnsubCommand &cmd, const CommandState &state);
     ExecStats simple_assignment(const SimpleAssignment &assign,
                                 const CommandState &state);
     ExecStats and_list(const AndList &and_list, const CommandState &state);
@@ -67,9 +68,6 @@ struct Executor {
 
     bool line_has_continuation() const;
     bool read_stdin();
-    std::string simple_substitution(const SimpleSubstitution &prog);
-    std::string cmd_substitution(const CmdSubstitution &cmd);
-    void substitution_run(std::vector<std::string> &support);
     std::vector<std::string> process_input();
     ExecStats execute();
 

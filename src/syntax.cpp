@@ -58,7 +58,7 @@ AsyncList AsyncList::from_seq(SequentialList &&seq) {
  * BNF:
  *
  * ```
- * cmd_substitution ::= ANDOPEN list_substitution CLOSE_ROUND
+ * cmd_substitution ::= ANDOPEN compound_list CLOSE_ROUND
  *                    ;
  * ```
  *
@@ -66,117 +66,25 @@ AsyncList AsyncList::from_seq(SequentialList &&seq) {
  * @return std::optional<ThisProgram>
  */
 template <IsTokenizer Tok>
-std::optional<CmdSubstitution>
-SyntaxTree<Tok>::cmd_substitution(Tok &tokenizer) const {
-    Tok sub_tokenizer{tokenizer};
+std::optional<CmdSub> SyntaxTree<Tok>::cmdsub(Tok &tokenizer) const {
+    Tok sub_tok{tokenizer};
 
-    const auto and_open = this->token(sub_tokenizer, TokenType::andopen);
-    if (!and_open)
+    const auto open_open = this->token(sub_tok, TokenType::andopen);
+    if (!open_open)
         return std::nullopt;
 
-    auto list = this->list_substitution(sub_tokenizer);
-    if (!list)
+    auto compound_list = this->compound_list(sub_tok);
+    if (!compound_list)
         return std::nullopt;
 
-    const auto close_round = this->token(sub_tokenizer, TokenType::close_round);
-    // TODO: error handling: print "missing closing paren"
+    const auto close_round = this->token(sub_tok, TokenType::close_round);
     if (!close_round)
         return std::nullopt;
 
-    tokenizer = sub_tokenizer;
-    list->start = *and_open;
-    list->end = *close_round;
+    tokenizer = sub_tok;
 
-    return list;
-}
-
-/**
- * BNF:
- *
- * ```
- * list_substitution ::=                   simple_substitution
- *                     |                   cmd_substitution
- *                     |                   TOKEN
- *                     | list_substitution simple_substitution
- *                     | list_substitution cmd_substitution
- *                     | list_substitution TOKEN
- *                     ;
- * ```
- *
- * @param tokenizer
- * @return std::optional<CmdSubstitution>
- */
-template <IsTokenizer Tok>
-std::optional<CmdSubstitution>
-SyntaxTree<Tok>::list_substitution(Tok &tokenizer) const {
-    CmdSubstitution retval{};
-    // TODO: decide if I want subshell to be opened outside of
-    // substitutions
-    // ssize_t open_parens{};
-
-    for (;;) {
-        auto simple = this->simple_substitution(tokenizer);
-        if (simple) {
-            retval.child.emplace_back(std::move(*simple));
-            continue;
-        }
-
-        auto subs = this->cmd_substitution(tokenizer);
-        if (subs) {
-            retval.child.emplace_back(std::move(*subs));
-            continue;
-        }
-
-        auto token = tokenizer.peek();
-        if (token && token->type != TokenType::eof &&
-            token->type != TokenType::close_round) {
-            retval.child.emplace_back(std::move(*token));
-            tokenizer.next_token();
-            continue;
-        }
-
-        break;
-    }
-
-    return retval;
-}
-
-/**
- * BNF:
- *
- * ```
- * simple_substitution ::= ANDOPEN         CLOSE_ROUND
- *                       | ANDOPEN program CLOSE_ROUND
- *                       ;
- * ```
- *
- * @param tokenizer
- * @return std::optional<ThisProgram>
- */
-template <IsTokenizer Tok>
-std::optional<SimpleSubstitution>
-SyntaxTree<Tok>::simple_substitution(Tok &tokenizer) const {
-    Tok sub_tokenizer{tokenizer};
-
-    const auto and_open = this->token(sub_tokenizer, TokenType::andopen);
-    if (!and_open)
-        return std::nullopt;
-
-    auto program = this->program(sub_tokenizer);
-    if (!program)
-        return std::nullopt;
-
-    const auto close_round = this->token(sub_tokenizer, TokenType::close_round);
-    // TODO: error handling: print "missing closing paren"
-    if (!close_round)
-        return std::nullopt;
-
-    tokenizer = sub_tokenizer;
-
-    return SimpleSubstitution{
-        .start = *and_open,
-        .end = *close_round,
-        .prog = std::move(*program),
+    return CmdSub{
+        .seq_list = std::make_unique<List>(take(compound_list)),
     };
 }
 
@@ -698,22 +606,22 @@ std::optional<Command> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
         auto cmd_word = this->cmd_word(tokenizer);
         auto cmd_suffix = this->cmd_suffix(tokenizer);
 
-        std::vector<Token> args{};
+        std::vector<Word> args{};
         std::vector<Redirect> redirects{};
         std::vector<AssignmentWord> assigments{};
 
-        for (const auto &s : cmd_prefix) {
+        for (auto &s : cmd_prefix) {
             if (std::holds_alternative<AssignmentWord>(s))
-                assigments.emplace_back(std::get<AssignmentWord>(s));
+                assigments.emplace_back(std::move(std::get<AssignmentWord>(s)));
             else
-                redirects.emplace_back(std::get<Redirect>(s));
+                redirects.emplace_back(std::move(std::get<Redirect>(s)));
         }
 
-        for (const auto &s : cmd_suffix) {
-            if (std::holds_alternative<Token>(s))
-                args.emplace_back(std::get<Token>(s));
+        for (auto &s : cmd_suffix) {
+            if (std::holds_alternative<Word>(s))
+                args.emplace_back(std::move(std::get<Word>(s)));
             else
-                redirects.emplace_back(std::get<Redirect>(s));
+                redirects.emplace_back(std::move(std::get<Redirect>(s)));
         }
 
         if (!cmd_word) {
@@ -723,11 +631,11 @@ std::optional<Command> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
             };
         }
 
-        return SimpleCommand{
-            .program = cmd_word.value(),
-            .arguments = args,
-            .redirections = redirects,
-            .envs = assigments,
+        return UnsubCommand{
+            .program = std::make_unique<Word>(take(cmd_word)),
+            .arguments = std::move(args),
+            .redirections = std::move(redirects),
+            .envs = std::move(assigments),
         };
     }
 
@@ -735,20 +643,20 @@ std::optional<Command> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
     if (cmd_name) {
         auto cmd_suffix = this->cmd_suffix(tokenizer);
 
-        std::vector<Token> args{};
+        std::vector<Word> args{};
         std::vector<Redirect> redirects{};
 
-        for (const auto &s : cmd_suffix) {
-            if (std::holds_alternative<Token>(s))
-                args.emplace_back(std::get<Token>(s));
+        for (auto &s : cmd_suffix) {
+            if (std::holds_alternative<Word>(s))
+                args.emplace_back(std::move(std::get<Word>(s)));
             else
-                redirects.emplace_back(std::get<Redirect>(s));
+                redirects.emplace_back(std::move(std::get<Redirect>(s)));
         }
 
-        return SimpleCommand{
-            .program = *cmd_name,
-            .arguments = args,
-            .redirections = redirects,
+        return UnsubCommand{
+            .program = std::make_unique<Word>(take(cmd_name)),
+            .arguments = std::move(args),
+            .redirections = std::move(redirects),
             .envs = {},
         };
     }
@@ -765,7 +673,7 @@ std::optional<Command> SyntaxTree<Tok>::simple_command(Tok &tokenizer) const {
  * ```
  */
 template <IsTokenizer Tok>
-std::optional<Token> SyntaxTree<Tok>::cmd_name(Tok &tokenizer) const {
+std::optional<Word> SyntaxTree<Tok>::cmd_name(Tok &tokenizer) const {
     return this->word(tokenizer);
 }
 
@@ -778,24 +686,26 @@ std::optional<Token> SyntaxTree<Tok>::cmd_name(Tok &tokenizer) const {
  * ```
  */
 template <IsTokenizer Tok>
-std::optional<Token> SyntaxTree<Tok>::cmd_word(Tok &tokenizer) const {
-    auto word = tokenizer.peek();
-
-    if (!word)
-        return std::nullopt;
-
-    if (word->type != TokenType::word && word->type != TokenType::quoted_word)
-        return std::nullopt;
-
-    if (word->type == TokenType::word) {
-        auto text = word->value;
-        if (text.find("=") == 0)
-            return std::nullopt;
-    }
-
-    tokenizer.next_token();
-
-    return word;
+std::optional<Word> SyntaxTree<Tok>::cmd_word(Tok &tokenizer) const {
+    //     auto word = tokenizer.peek();
+    //
+    //     if (!word)
+    //         return std::nullopt;
+    //
+    //     if (word->type != TokenType::word && word->type !=
+    //     TokenType::quoted_word)
+    //         return std::nullopt;
+    //
+    //     if (word->type == TokenType::word) {
+    //         auto text = word->value;
+    //         if (text.find("=") == 0)
+    //             return std::nullopt;
+    //     }
+    //
+    //     tokenizer.next_token();
+    //
+    //     return word;
+    return this->word(tokenizer);
 }
 
 /**
@@ -843,18 +753,18 @@ SyntaxTree<Tok>::cmd_prefix(Tok &tokenizer) const {
  * ```
  */
 template <IsTokenizer Tok>
-std::vector<std::variant<Token, Redirect>>
+std::vector<std::variant<Word, Redirect>>
 SyntaxTree<Tok>::cmd_suffix(Tok &tokenizer) const {
-    std::vector<std::variant<Token, Redirect>> retval{};
+    std::vector<std::variant<Word, Redirect>> retval{};
 
     for (;;) {
         if (auto word = this->word(tokenizer)) {
-            retval.emplace_back(std::move(*word));
+            retval.emplace_back(take(word));
             continue;
         }
 
         if (auto redirect = this->io_redirect(tokenizer)) {
-            retval.emplace_back(std::move(*redirect));
+            retval.emplace_back(take(redirect));
             continue;
         }
 
@@ -1191,17 +1101,17 @@ std::optional<Token> SyntaxTree<Tok>::separator(Tok &tokenizer) const {
 }
 
 template <IsTokenizer Tok>
-std::optional<Token> SyntaxTree<Tok>::word(Tok &tokenizer) const {
-    const auto word = tokenizer.peek();
-    if (!word)
-        return std::nullopt;
+std::optional<Word> SyntaxTree<Tok>::word(Tok &tokenizer) const {
+    if (auto word = this->token(tokenizer, TokenType::word))
+        return word;
 
-    if (word->type != TokenType::word && word->type != TokenType::quoted_word)
-        return std::nullopt;
+    if (auto quoted = this->token(tokenizer, TokenType::quoted_word))
+        return quoted;
 
-    tokenizer.next_token();
+    if (auto cmd_sub = this->cmdsub(tokenizer))
+        return cmd_sub;
 
-    return word;
+    return std::nullopt;
 }
 
 template <IsTokenizer Tok>

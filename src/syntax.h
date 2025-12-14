@@ -5,6 +5,7 @@
 #include "util.h"
 #include <format>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -15,6 +16,12 @@ enum class OpenKind {
     append,
     rw,
 };
+
+struct CmdSub;
+
+// using Substitution = std::variant<CmdSub>;
+
+using Word = std::variant<CmdSub, Token>;
 
 struct AssignmentWord {
     Token whole;
@@ -53,6 +60,13 @@ struct SimpleCommand {
     std::string text() const;
 };
 
+struct UnsubCommand {
+    std::unique_ptr<Word> program;
+    std::vector<Word> arguments;
+    std::vector<Redirect> redirections;
+    std::vector<AssignmentWord> envs;
+};
+
 struct AndList;
 struct OrList;
 struct Subshell;
@@ -60,7 +74,7 @@ struct Pipeline;
 struct SequentialList;
 struct AsyncList;
 
-using Command = std::variant<SimpleAssignment, SimpleCommand, Subshell>;
+using Command = std::variant<SimpleAssignment, UnsubCommand, Subshell>;
 using OpList = std::variant<AndList, OrList, Pipeline>;
 using List = std::variant<SequentialList, AsyncList>;
 
@@ -108,21 +122,8 @@ struct ThisProgram {
 // Substitutions
 // ------------------------------------
 
-struct CmdSubstitution;
-struct SimpleSubstitution;
-using InnerSubstitution =
-    std::variant<CmdSubstitution, SimpleSubstitution, Token>;
-
-struct SimpleSubstitution {
-    Token start;
-    Token end;
-    ThisProgram prog;
-};
-
-struct CmdSubstitution {
-    Token start;
-    Token end;
-    std::vector<InnerSubstitution> child;
+struct CmdSub {
+    std::unique_ptr<List> seq_list;
 };
 
 // ---------------------------
@@ -137,11 +138,11 @@ struct CmdSubstitution {
  */
 template <IsTokenizer Tok> class SyntaxTree {
   public:
-    std::optional<CmdSubstitution> cmd_substitution(Tok &tokenizer) const;
+    std::optional<CmdSub> cmdsub(Tok &tokenizer) const;
 
-    std::optional<CmdSubstitution> list_substitution(Tok &tokenizer) const;
-
-    std::optional<SimpleSubstitution> simple_substitution(Tok &tokenizer) const;
+    // --------------------------------
+    // POSIX
+    // --------------------------------
 
     std::optional<ThisProgram> program(Tok &tokenizer) const;
 
@@ -169,14 +170,14 @@ template <IsTokenizer Tok> class SyntaxTree {
 
     std::optional<Command> simple_command(Tok &tokenizer) const;
 
-    std::optional<Token> cmd_name(Tok &tokenizer) const;
+    std::optional<Word> cmd_name(Tok &tokenizer) const;
 
-    std::optional<Token> cmd_word(Tok &tokenizer) const;
+    std::optional<Word> cmd_word(Tok &tokenizer) const;
 
     std::vector<std::variant<AssignmentWord, Redirect>>
     cmd_prefix(Tok &tokenizer) const;
 
-    std::vector<std::variant<Token, Redirect>> cmd_suffix(Tok &tokenizer) const;
+    std::vector<std::variant<Word, Redirect>> cmd_suffix(Tok &tokenizer) const;
 
     std::optional<std::vector<Redirect>> redirect_list(Tok &tokenizer) const;
 
@@ -196,7 +197,7 @@ template <IsTokenizer Tok> class SyntaxTree {
 
     std::optional<Token> separator(Tok &tokenizer) const;
 
-    std::optional<Token> word(Tok &tokenizer) const;
+    std::optional<Word> word(Tok &tokenizer) const;
 
     std::optional<AssignmentWord> assignment_word(Tok &tokenizer) const;
 
@@ -269,9 +270,22 @@ struct std::formatter<SimpleAssignment, CharT> : debug_spec {
     }
 };
 
-template <> struct std::formatter<SimpleCommand> : debug_spec {
+template <typename CharT>
+struct std::formatter<SimpleCommand, CharT> : debug_spec {
     auto format(const SimpleCommand &prog, auto &ctx) const {
         this->start<SimpleCommand>(ctx);
+        this->field("program", prog.program, ctx);
+        this->field("arguments", prog.arguments, ctx);
+        this->field("redirections", prog.redirections, ctx);
+        this->field("envs", prog.envs, ctx);
+        return this->finish(ctx);
+    }
+};
+
+template <typename CharT>
+struct std::formatter<UnsubCommand, CharT> : debug_spec {
+    auto format(const UnsubCommand &prog, auto &ctx) const {
+        this->start<UnsubCommand>(ctx);
         this->field("program", prog.program, ctx);
         this->field("arguments", prog.arguments, ctx);
         this->field("redirections", prog.redirections, ctx);
@@ -324,22 +338,10 @@ template <HasLeftRight T> struct std::formatter<T> : debug_spec {
     }
 };
 
-template <> struct std::formatter<SimpleSubstitution> : debug_spec {
-    auto format(const SimpleSubstitution &subs, auto &ctx) const {
-        this->start<SimpleSubstitution>(ctx);
-        this->field("start", subs.start, ctx);
-        this->field("end", subs.end, ctx);
-        this->field("prog", subs.prog, ctx);
-        return this->finish(ctx);
-    }
-};
-
-template <> struct std::formatter<CmdSubstitution> : debug_spec {
-    auto format(const CmdSubstitution &subs, auto &ctx) const {
-        this->start<CmdSubstitution>(ctx);
-        this->field("start", subs.start, ctx);
-        this->field("end", subs.end, ctx);
-        this->field("child", subs.child, ctx);
+template <> struct std::formatter<CmdSub> : debug_spec {
+    auto format(const CmdSub &subs, auto &ctx) const {
+        this->start<CmdSub>(ctx);
+        this->field("seq_list", subs.seq_list, ctx);
         return this->finish(ctx);
     }
 };
