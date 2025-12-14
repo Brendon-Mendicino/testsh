@@ -544,9 +544,6 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
 
     ExecStats retval = spawner.spawn_async(child);
 
-    // std::println(stderr, "+ ({}, {}): {}", retval.child_pid,
-    //              retval.pipeline_pgid, cmd.text());
-
     return retval;
 }
 
@@ -718,6 +715,7 @@ Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
 
     Job job{};
     pid_t pipeline_pgid = state.pipeline_pgid;
+    bool is_foreground = state.is_foreground;
     int prev_reader_fd = 0;
 
     auto no_cmds = std::max(pipeline.cmds.size() - 1, (size_t)0);
@@ -735,6 +733,7 @@ Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
         auto stats = this->command(cmd, {
                                             .redirects = std::move(redirects),
                                             .fd_to_close = {reader_fd},
+                                            .is_foreground = is_foreground,
                                             .inside_pipeline = true,
                                             .pipeline_pgid = pipeline_pgid,
                                         });
@@ -751,6 +750,7 @@ Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
                                {
                                    .redirects = std::move(redirects),
                                    .fd_to_close = {},
+                                   .is_foreground = is_foreground,
                                    .inside_pipeline = false,
                                    .pipeline_pgid = pipeline_pgid,
                                });
@@ -916,7 +916,7 @@ ExecStats Executor::subshell(const Subshell &subshell,
     Spawner spawner{state, this->shell, SpawnType::subshell};
 
     if (!redirect.add_redirects(subshell.redirections)) {
-        return {.exit_code = 1};
+        return ExecStats::ERROR;
     }
 
     auto subshell_call = [&]() {
@@ -988,8 +988,6 @@ bool Executor::read_stdin() {
 
     new_line += "\n";
     this->input_buffer.emplace_back(std::move(new_line));
-
-    std::println(stderr, "line: {}", new_line);
 
     return true;
 }
@@ -1102,7 +1100,5 @@ void Executor::loop() {
         }
 
         state = this->update();
-
-        std::println(stderr, "terminate: {}", state.terminate_session);
     }
 }
