@@ -40,7 +40,7 @@ struct ListStats {
 };
 
 struct Executor {
-    std::vector<std::string> input_buffer;
+    std::vector<std::string> input_buffer{};
     Shell shell{};
     std::vector<Job> bg_jobs{};
     // TerminalState terminal_state;

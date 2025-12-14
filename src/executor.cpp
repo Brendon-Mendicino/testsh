@@ -512,7 +512,11 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     // them. The unneeded files will be automatically closed when the
     // destructor will be called.
     RedirectController redirect{state};
-    Spawner spawner{state, this->shell};
+    Spawner spawner{
+        .state = state,
+        .shell = this->shell,
+        .spawn_type = SpawnType::command,
+    };
 
     if (!redirect.add_redirects(cmd.redirections)) {
         return ExecStats::ERROR;
@@ -713,7 +717,7 @@ Job Executor::pipeline(const Pipeline &pipeline, const CommandState &state) {
     assertm(!pipeline.cmds.empty(), "A pipeline must always contain something");
 
     Job job{};
-    pid_t pipeline_pgid = -1;
+    pid_t pipeline_pgid = state.pipeline_pgid;
     int prev_reader_fd = 0;
 
     auto no_cmds = std::max(pipeline.cmds.size() - 1, (size_t)0);
@@ -985,6 +989,8 @@ bool Executor::read_stdin() {
     new_line += "\n";
     this->input_buffer.emplace_back(std::move(new_line));
 
+    std::println(stderr, "line: {}", new_line);
+
     return true;
 }
 
@@ -1096,5 +1102,7 @@ void Executor::loop() {
         }
 
         state = this->update();
+
+        std::println(stderr, "terminate: {}", state.terminate_session);
     }
 }
