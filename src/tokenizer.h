@@ -13,6 +13,7 @@ enum class TokenType {
     word,
     quoted_word,
     separator,
+    doll_word,
     new_line,
     semicolon,
     andper,
@@ -50,7 +51,7 @@ struct Token {
 };
 
 struct Specification {
-    std::string regex;
+    std::string_view regex;
     TokenType spec_type;
 };
 
@@ -119,6 +120,8 @@ constexpr std::string_view to_string(const TokenType token) {
         return "word";
     case TokenType::separator:
         return "separator";
+    case TokenType::doll_word:
+        return "doll_word";
     case TokenType::quoted_word:
         return "quoted_word";
     case TokenType::new_line:
@@ -168,26 +171,30 @@ constexpr std::string_view to_string(const TokenType token) {
     std::unreachable();
 }
 
-template <> struct std::formatter<Token> : debug_spec {
-    auto format(const Token &token, auto &ctx) const {
-        // Print regex pattern and token type
-        return std::format_to(ctx.out(),
-                              // TODO: compiler state is garbage...
-                              // "Token(type={}, value={:?}, start={}, end={})",
-                              "Token(type={}, value={}, start={}, end={})",
-                              to_string(token.type), token.value, token.start,
-                              token.end);
+template <typename CharT> struct std::formatter<TokenType, CharT> : debug_spec {
+    auto format(const TokenType &t, auto &ctx) const {
+        return std::format_to(ctx.out(), "{}", to_string(t));
     }
 };
 
-template <> struct std::formatter<Specification> : debug_spec {
+template <typename CharT> struct std::formatter<Token, CharT> : debug_spec {
+    auto format(const Token &token, auto &ctx) const {
+        this->start<Token>(ctx);
+        this->field("type", token.type, ctx);
+        this->field("value", token.value, ctx);
+        this->field("start", token.start, ctx);
+        this->field("end", token.end, ctx);
+        return this->finish(ctx);
+    }
+};
+
+template <typename CharT>
+struct std::formatter<Specification, CharT> : debug_spec {
     auto format(const Specification &spec, auto &ctx) const {
-        // Print regex pattern and token type
-        return std::format_to(ctx.out(),
-                              // TODO: compiler state is garbage...
-                              // "Specification(regex={:?}, type={})",
-                              "Specification(regex={}, type={})", spec.regex,
-                              to_string(spec.spec_type));
+        this->start<Token>(ctx);
+        this->field("regex", spec.regex, ctx);
+        this->field("spec_type", spec.spec_type, ctx);
+        return this->finish(ctx);
     }
 };
 

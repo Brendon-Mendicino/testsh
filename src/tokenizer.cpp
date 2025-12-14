@@ -1,12 +1,19 @@
 #include "tokenizer.h"
 #include "re2/re2.h"
 #include <cassert>
+#include <deque>
+#include <print>
 #include <ranges>
-#include <vector>
+#include <span>
 
 namespace vw = std::ranges::views;
 
-static const std::vector<Specification> specs{
+struct CompiledSpec {
+    const re2::RE2 &regex;
+    TokenType spec_type;
+};
+
+static constexpr Specification _specs[] = {
     // Separators
     {R"(^( +))", TokenType::separator},
     {R"(^(\\)\n$)", TokenType::line_continuation},
@@ -17,6 +24,7 @@ static const std::vector<Specification> specs{
 
     // Command substitution
     {R"(^(\$\())", TokenType::andopen},
+    {R"(^(\$[\w\-\/.=]+))", TokenType::doll_word},
 
     // List separators
     {R"(^(;))", TokenType::semicolon},
@@ -35,7 +43,15 @@ static const std::vector<Specification> specs{
 
     // Word kinds
     // Match any normal character + any quoted character
-    {R"(^((?:[\w=\-\/.]|\\.)+))", TokenType::word},
+    //
+    // For unicode characters read the re2 docs:
+    // https://github.com/google/re2/wiki/syntax
+    //
+    // Unicode character class names:
+    // - L: match unicode literal
+    // - Nd: match unicode numbers
+    // - So: other symbol
+    {R"(^((?:[\p{L}\p{Nd}\p{So}=\-\/.]|\\.)+))", TokenType::word},
 
     // Quoatations
     {R"(^('[^']*'))", TokenType::quoted_word},
@@ -57,6 +73,31 @@ static const std::vector<Specification> specs{
     // EOF
     {R"(^(\z))", TokenType::eof},
 };
+
+constexpr std::span<const Specification> _spec_span = _specs;
+
+std::span<const CompiledSpec> compiled_specs() {
+    static std::deque<re2::RE2> regex_storage;
+    static std::vector<CompiledSpec> specs_ref;
+
+    static bool init = [] {
+        specs_ref.reserve(_spec_span.size());
+
+        for (const auto &s : _spec_span) {
+            const auto &last = regex_storage.emplace_back(s.regex);
+            specs_ref.push_back({last, s.spec_type});
+
+            assert(last.ok());
+            // std::println(stderr, "re={} size={}", last.pattern(),
+            //              last.ProgramSize());
+        }
+
+        return true;
+    }();
+
+    (void)init;
+    return specs_ref;
+}
 
 // ------------------------------------
 // Token
@@ -91,7 +132,7 @@ std::string Token::text() const {
 std::optional<Token> UnbufferedTokenizer::next_token() {
     std::string_view match{};
 
-    for (const auto &spec : specs) {
+    for (const auto &spec : compiled_specs()) {
         if (!RE2::PartialMatch(this->input, spec.regex, &match))
             continue;
 
