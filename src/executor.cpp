@@ -472,14 +472,14 @@ static std::tuple<int, int> create_pipe() {
 }
 
 static bool is_builtin(const SimpleCommand &cmd) {
-    const auto prog = cmd.program.text();
+    const auto &prog = cmd.program;
 
     return prog == "bg" || prog == "cd" || prog == "exec" || prog == "exit" ||
            prog == "fg" || prog == "jobs";
 }
 
 std::optional<ExecStats> Executor::builtin(const SimpleCommand &cmd) {
-    const auto prog = cmd.program.text();
+    const auto &prog = cmd.program;
     int exit_code{};
 
     if (prog == "bg") {
@@ -546,11 +546,96 @@ ExecStats Executor::simple_command(const SimpleCommand &cmd,
     return retval;
 }
 
+// For substitution details take a look at the standard.
+// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_03
+std::string Executor::cmdsub(const CmdSub &sub, const CommandState &state) {
+    Job job{};
+
+    Spawner spawner{
+        .state = state,
+        .shell = this->shell,
+        .spawn_type = SpawnType::subshell,
+    };
+
+    // Setup piping for stdout redirections
+    const auto [reader_fd, writer_fd] = create_pipe();
+
+    auto child = [&]() {
+        // -----------
+        // Child
+        // -----------
+
+        close(reader_fd);
+        dup2(writer_fd, STDOUT_FILENO);
+        close(writer_fd);
+
+        const auto stats = this->list(*sub.seq_list, state);
+
+        exit(stats.last_stats.exit_code);
+    };
+
+    // -----------
+    // Parent
+    // -----------
+
+    // Start child and read its output from reader_fd
+    ExecStats child_stats = spawner.spawn_async(child);
+    job.add(std::move(child_stats));
+
+    // Start reading
+    close(writer_fd);
+
+    fd_streambuf buf{reader_fd};
+    std::istream is(&buf);
+
+    std::string substitution(std::istreambuf_iterator<char>(is), {});
+
+    close(reader_fd);
+
+    // Remove last newline if present
+    if (!substitution.empty() && substitution.back() == '\n') {
+        substitution = substitution.substr(0, substitution.size() - 1);
+    }
+
+    // The child should be already terminated, collect the signal
+    // to avoid leaving zombie processes hanging around.
+    Waiter{this->shell}.wait(job);
+
+    return substitution;
+}
+
 ExecStats Executor::unsub_command(const UnsubCommand &cmd,
                                   const CommandState &state) {
 
-    std::println(stderr, "unsub_command: not implemented");
-    return ExecStats::shallow(getpid());
+    std::string program{};
+    std::vector<std::string> arguments{};
+
+    if (std::holds_alternative<CmdSub>(*cmd.program)) {
+        program = this->cmdsub(std::get<CmdSub>(*cmd.program), state);
+    } else {
+        program = std::get<Token>(*cmd.program).text();
+    }
+
+    for (const auto &arg : cmd.arguments) {
+        std::string arg_str;
+
+        if (std::holds_alternative<CmdSub>(arg)) {
+            arg_str = this->cmdsub(std::get<CmdSub>(arg), state);
+        } else {
+            arg_str = std::get<Token>(arg).text();
+        }
+
+        arguments.emplace_back(std::move(arg_str));
+    }
+
+    SimpleCommand expanded{
+        .program = std::move(program),
+        .arguments = std::move(arguments),
+        .redirections = cmd.redirections,
+        .envs = cmd.envs,
+    };
+
+    return this->simple_command(expanded, state);
 }
 
 static void add_shell_vars(Shell &shell, const SimpleAssignment &assign) {
@@ -902,9 +987,6 @@ bool Executor::read_stdin() {
 
     return true;
 }
-
-// For substitution details take a look at the standard.
-// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_06_03
 
 std::vector<std::string> Executor::process_input() {
     // Create a support buffer where the line_continuations are cut

@@ -13,10 +13,10 @@
 // ------------------------------------
 
 std::string SimpleCommand::text() const {
-    std::string cmd{this->program.text()};
+    std::string cmd{this->program};
 
     for (const auto &arg : this->arguments) {
-        cmd += " " + arg.text();
+        cmd += " " + arg;
     }
 
     return cmd;

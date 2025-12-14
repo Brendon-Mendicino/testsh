@@ -27,7 +27,7 @@ int builtin_bg(const SimpleCommand &bg, std::vector<Job> &jobs,
 int builtin_cd(const SimpleCommand &cd) {
     fs::path target{};
 
-    if (cd.arguments.empty() || cd.arguments[0].value == "~") {
+    if (cd.arguments.empty() || cd.arguments[0] == "~") {
         const char *home = std::getenv("HOME");
 
         if (home == nullptr) {
@@ -37,7 +37,7 @@ int builtin_cd(const SimpleCommand &cd) {
 
         target = home;
     } else if (cd.arguments.size() == 1) {
-        target = cd.arguments[0].text();
+        target = cd.arguments[0];
     } else {
         std::println(stderr, "cd: too many arguments");
         return 1;
@@ -56,7 +56,7 @@ int builtin_cd(const SimpleCommand &cd) {
 }
 
 int builtin_exec(const SimpleCommand &exec, const Shell &shell) {
-    assert(exec.program.text() == "exec");
+    assert(exec.program == "exec");
 
     if (exec.arguments.size() < 1) {
         return 0;
@@ -74,13 +74,13 @@ int builtin_exec(const SimpleCommand &exec, const Shell &shell) {
 
     const int retval = executor.exec();
 
-    std::println(stderr, "exec: {}: {}", to_exec.program.text(),
-                 std::strerror(errno));
+    std::println(stderr, "exec: {}: {}", to_exec.program, std::strerror(errno));
+
     return retval;
 }
 
 int builtin_exit(const SimpleCommand &exit) {
-    assert(exit.program.text() == "exit");
+    assert(exit.program == "exit");
 
     if (exit.arguments.size() > 1) {
         std::println(stderr, "exit: too many arguments");
@@ -90,8 +90,7 @@ int builtin_exit(const SimpleCommand &exit) {
     int exit_code{};
 
     if (exit.arguments.size() == 1) {
-        std::string tmp{exit.arguments[0].text()};
-        exit_code = std::atoi(tmp.c_str());
+        exit_code = std::atoi(exit.arguments[0].c_str());
     } else {
         exit_code = 0;
     }
@@ -115,6 +114,8 @@ int builtin_fg(const SimpleCommand &fg, std::vector<Job> &jobs,
 }
 
 int builtin_jobs(const SimpleCommand &jobs, const std::vector<Job> &bg_jobs) {
+    assert(jobs.program == "jobs");
+
     std::println("=== JOBS ===");
     for (const auto &job : bg_jobs) {
         const auto state = job.stopped() ? "Stopped" : "Backgournd";

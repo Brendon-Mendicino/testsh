@@ -52,8 +52,8 @@ struct SimpleAssignment {
 };
 
 struct SimpleCommand {
-    Token program;
-    std::vector<Token> arguments;
+    std::string program;
+    std::vector<std::string> arguments;
     std::vector<Redirect> redirections;
     std::vector<AssignmentWord> envs;
 

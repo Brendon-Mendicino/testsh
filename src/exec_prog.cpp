@@ -7,6 +7,7 @@
 
 namespace vw = std::ranges::views;
 
+// TODO: take ownership of cmd (?)
 void Exec::init_args(const SimpleCommand &cmd) {
     const auto &args = cmd.arguments;
 
@@ -19,11 +20,11 @@ void Exec::init_args(const SimpleCommand &cmd) {
     this->args_owner.reserve(args.size() + 2);
 
     // Push program first
-    this->args_owner.emplace_back(cmd.program.text());
+    this->args_owner.emplace_back(cmd.program);
     this->args_array[0] = this->args_owner[0].c_str();
 
     for (size_t i{}; i < args.size(); ++i) {
-        auto &s = this->args_owner.emplace_back(args[i].text());
+        auto &s = this->args_owner.emplace_back(args[i]);
         this->args_array[i + 1] = s.c_str();
     }
 

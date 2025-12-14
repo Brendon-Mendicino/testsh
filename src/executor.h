@@ -48,6 +48,7 @@ struct Executor {
     std::optional<ExecStats> builtin(const SimpleCommand &cmd);
     ExecStats simple_command(const SimpleCommand &cmd,
                              const CommandState &state);
+    std::string cmdsub(const CmdSub &sub, const CommandState &state);
     ExecStats unsub_command(const UnsubCommand &cmd, const CommandState &state);
     ExecStats simple_assignment(const SimpleAssignment &assign,
                                 const CommandState &state);

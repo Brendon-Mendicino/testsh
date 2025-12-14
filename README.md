@@ -31,7 +31,7 @@ $(cd "$BUILD" && \
     curl -L -o "$FILE" "$URL" && \
     unzip -q "$FILE")
 
-"$BUILD"/usr/bin/bazel-compile-commands
+"$BUILD"/usr/bin/bazel-compile-commands :testsh
 ```
 
 ## Stages
