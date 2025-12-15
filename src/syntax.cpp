@@ -1108,6 +1108,9 @@ std::optional<Word> SyntaxTree<Tok>::word(Tok &tokenizer) const {
     if (auto quoted = this->token(tokenizer, TokenType::quoted_word))
         return quoted;
 
+    if (auto var_sub = this->token(tokenizer, TokenType::doll_word))
+        return VarSub{take(var_sub)};
+
     if (auto cmd_sub = this->cmdsub(tokenizer))
         return cmd_sub;
 

@@ -54,6 +54,14 @@ void ShellVars::upsert(std::string var, std::optional<VarAttr> attr) {
     this->vars.insert(std::move(shell_var));
 }
 
+std::optional<std::string_view> ShellVars::get(std::string_view str) const {
+    const auto it = this->vars.find(str);
+    if (it == this->vars.end())
+        return std::nullopt;
+
+    return it->value();
+}
+
 static void init_environment(ShellVars &vars) {
     for (size_t i = 0; environ[i] != nullptr; i++) {
         vars.upsert(environ[i], VarAttr{.external = true});

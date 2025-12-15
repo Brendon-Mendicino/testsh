@@ -2,7 +2,6 @@
 #include "re2/re2.h"
 #include <cassert>
 #include <deque>
-#include <print>
 #include <ranges>
 #include <span>
 
@@ -24,7 +23,7 @@ static constexpr Specification _specs[] = {
 
     // Command substitution
     {R"(^(\$\())", TokenType::andopen},
-    {R"(^(\$[\w\-\/.=]+))", TokenType::doll_word},
+    {R"(^(\$((?:[\w\-\/.=]+)|(?:\$)|(?:!)|(?:\?))))", TokenType::doll_word},
 
     // List separators
     {R"(^(;))", TokenType::semicolon},

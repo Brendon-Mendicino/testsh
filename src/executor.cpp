@@ -605,14 +605,38 @@ std::string Executor::cmdsub(const CmdSub &sub, const CommandState &state) {
     return substitution;
 }
 
+std::string Executor::varsub(const VarSub &sub, const CommandState &state) {
+    assertm(sub.token.value.starts_with("$"),
+            "The first character must always be a dollar.");
+
+    // TODO: handle special cases
+
+    auto value = shell.vars.get(sub.token.value.substr(1));
+    return std::string(value.value_or(""));
+}
+
+std::string Executor::substitution(const Substitution &sub,
+                                   const CommandState &state) {
+
+    auto sub_str = std::visit(
+        overloads{
+            [&](const CmdSub &sub) { return this->cmdsub(sub, state); },
+            [&](const VarSub &sub) { return this->varsub(sub, state); },
+        },
+        sub);
+
+    return sub_str;
+}
+
 ExecStats Executor::unsub_command(const UnsubCommand &cmd,
                                   const CommandState &state) {
 
     std::string program{};
     std::vector<std::string> arguments{};
 
-    if (std::holds_alternative<CmdSub>(*cmd.program)) {
-        program = this->cmdsub(std::get<CmdSub>(*cmd.program), state);
+    if (std::holds_alternative<Substitution>(*cmd.program)) {
+        program =
+            this->substitution(std::get<Substitution>(*cmd.program), state);
     } else {
         program = std::get<Token>(*cmd.program).text();
     }
@@ -620,8 +644,8 @@ ExecStats Executor::unsub_command(const UnsubCommand &cmd,
     for (const auto &arg : cmd.arguments) {
         std::string arg_str;
 
-        if (std::holds_alternative<CmdSub>(arg)) {
-            arg_str = this->cmdsub(std::get<CmdSub>(arg), state);
+        if (std::holds_alternative<Substitution>(arg)) {
+            arg_str = this->substitution(std::get<Substitution>(arg), state);
         } else {
             arg_str = std::get<Token>(arg).text();
         }

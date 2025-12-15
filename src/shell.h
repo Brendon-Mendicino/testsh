@@ -40,6 +40,8 @@ class ShellVars {
     auto end() const { return vars.end(); }
 
     void upsert(std::string var, std::optional<VarAttr> attr);
+
+    std::optional<std::string_view> get(std::string_view str) const;
 };
 
 struct Shell {

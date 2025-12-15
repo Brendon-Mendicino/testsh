@@ -18,10 +18,11 @@ enum class OpenKind {
 };
 
 struct CmdSub;
+struct VarSub;
 
-// using Substitution = std::variant<CmdSub>;
+using Substitution = std::variant<CmdSub, VarSub>;
 
-using Word = std::variant<CmdSub, Token>;
+using Word = std::variant<Substitution, Token>;
 
 struct AssignmentWord {
     Token whole;
@@ -121,6 +122,10 @@ struct ThisProgram {
 // ------------------------------------
 // Substitutions
 // ------------------------------------
+
+struct VarSub {
+    Token token;
+};
 
 struct CmdSub {
     std::unique_ptr<List> seq_list;
@@ -334,6 +339,14 @@ template <HasLeftRight T> struct std::formatter<T> : debug_spec {
         this->start<T>(ctx);
         this->field("left", node.left, ctx);
         this->field("right", node.right, ctx);
+        return this->finish(ctx);
+    }
+};
+
+template <typename CharT> struct std::formatter<VarSub, CharT> : debug_spec {
+    auto format(const VarSub &subs, auto &ctx) const {
+        this->start<VarSub>(ctx);
+        this->field("token", subs.token, ctx);
         return this->finish(ctx);
     }
 };
